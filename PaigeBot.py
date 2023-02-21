@@ -3,12 +3,10 @@ import os
 from discord import message
 import platform
 import requests
+import json
 
 from discord.ext import commands, tasks
 from dotenv import load_dotenv
-from datetime import datetime, time as datetime_time, timedelta
-from giphy_client.rest import ApiException
-from pprint import pprint
 
 # BOT INFO
 
@@ -20,6 +18,17 @@ bot_platform = [platform.system(), platform.release(), platform.python_version()
 # VARIABLES
 
 embed_color = 0x0044bb
+
+with open("permanent_variables.json", "r") as f:      # read the json file
+    permanent_variables = json.load(f)
+
+steamgifts_threads = permanent_variables['thread_links']
+
+
+# steamgifts_threads = {
+#     "main": "https://www.steamgifts.com/discussion/sjQKU/",
+#     "screenshots": "https://www.steamgifts.com/discussion/Tm80g/"
+# }
 
 # CONFIG
 bot = commands.Bot(command_prefix=prefixes, help_command=None, intents=discord.Intents.all())
@@ -37,24 +46,24 @@ def ensure_dir(directory):
     if not os.path.exists(directory):
         os.makedirs(directory)
 
-def sg_names_checker(users):
+# def sg_names_checker(users):
 
-    results = []
-    fake_users = []
+#     results = []
+#     fake_users = []
 
-    for user in users:
+#     for user in users:
 
-        link = f"https://www.steamgifts.com/user/{str(user)}"
+#         link = f"https://www.steamgifts.com/user/{str(user)}"
 
-        r = requests.get(link)
-        redirected = True if r.status_code == 404 else r.url != link
+#         r = requests.get(link)
+#         redirected = True if r.status_code == 404 else r.url != link
 
-        results.append({user: redirected})
+#         results.append({user: redirected})
 
-        if redirected:
-            fake_users.append(user)
+#         if redirected:
+#             fake_users.append(user)
     
-    return(fake_users)
+#     return(fake_users)
 
 # BOT EVENTS
 
@@ -62,8 +71,8 @@ def sg_names_checker(users):
 async def on_ready():
     print("Logged in as {}".format(bot.user, bot.command_prefix))
     print("Ready!")
-    await bot.change_presence(status=discord.Status.online)
-    await bot.change_presence(activity=discord.Game("Prefix: p!"))
+    await bot.change_presence(status=discord.Status.online,
+        activity=discord.Activity(name="for prefix: p!", type=discord.ActivityType.watching))
     
 @bot.event
 async def on_command_error(ctx, error):
@@ -91,33 +100,108 @@ async def info(ctx):
 
 @bot.command()
 async def threads(ctx):
-    await ctx.send("Main thread: <https://www.steamgifts.com/discussion/sjQKU/>\n")
+    await ctx.send(f"Main thread: <{steamgifts_threads['main']}>\nScreenshot of the Month thread: <{steamgifts_threads['screenshots']}>")
 
 @bot.command()
 async def rules(ctx):
-    await ctx.send("<https://steamcommunity.com/groups/SGMonthlyMagazine/discussions/3/3758852249517826899/>")
+    await ctx.send(f"{botname} recommends reading the rules! <https://steamcommunity.com/groups/SGMonthlyMagazine/discussions/3/3758852249517826899/>")
 
 # HELP COMMANDS
 
 @bot.command()
 async def help(ctx):
 
+    threads_list = list(steamgifts_threads)
+    threads_list = ", ".join(threads_list)
+
     embedVar = discord.Embed(title="Commands", description="", color=embed_color)
-    embedVar.add_field(name="test", value="Simple test command. Check if the bot is alive!", inline=False)
-    embedVar.add_field(name="help", value="Displays this message.", inline=False)
-    embedVar.add_field(name="info", value=f"Information about me, {botname}!", inline=False)
-    embedVar.add_field(name="threads", value="Lists relevant Steamgifts threads.", inline=False)
-    embedVar.add_field(name="rules", value="Provides a link to the rules.", inline=False)
+    embedVar.add_field(
+        name="\nPublic Commands",
+        value=f"""
+        **test**
+        Simple test command. Check if the bot is alive!
+
+        **help**
+        Displays this message.
+
+        **info**
+        Information about me, {botname}!
+
+        **threads**
+        Lists relevant Steamgifts threads.
+
+        **rules**
+        Provides a link to the rules.
+        """,
+        inline=True
+    )
+    embedVar.add_field(
+        name="Staff Commands",
+        value=f"""
+        **updatethread** `thread` `link`
+        Update the `link` to a `thread` (`{threads_list}`)
+
+        **checkusers** `usernames`
+        Verifies if a list of `usernames` (separated by spaces or newlines) matches a profile on Steamgifts.
+        """,
+        inline=True
+    )
+
+    # embedVar.add_field(name="test", value="Simple test command. Check if the bot is alive!", inline=False)
+    # embedVar.add_field(name="help", value="Displays this message.", inline=False)
+    # embedVar.add_field(name="info", value=f"Information about me, {botname}!", inline=False)
+    # embedVar.add_field(name="threads", value="Lists relevant Steamgifts threads.", inline=False)
+    # embedVar.add_field(name="rules", value="Provides a link to the rules.", inline=False)
+
     await ctx.send(embed=embedVar)
 
 # MODERATOR COMMANDS
 
 @bot.command()
-@commands.has_any_role("Staff", "Founders")
-async def checkvotes(ctx, *users):
-    await ctx.send("Processing...")
-    fake_users = sg_names_checker(users)
+@commands.has_any_role("Staff", "Founders", "Mad Scientist")
+async def updatethread(ctx, thread, link):
+
+    if thread in steamgifts_threads:
+        permanent_variables['thread_links'][thread] = link
+        with open("permanent_variables.json", "w") as f:      # write back to the json file
+            json.dump(permanent_variables, f)
+
+        await ctx.send(f"Thread `{thread}` set to `{link}`.")
+
+    else:
+        threads_list = list(steamgifts_threads)
+        threads_list = "\n".join(threads_list)
+        await ctx.send(f"Thread `{thread}` not found. Please use one of the following thread name arguments to set thread links:\n`{threads_list}`")
+
+@bot.command()
+@commands.has_any_role("Staff", "Founders", "Mad Scientist")
+async def checkusers(ctx, *users):
+
+    results = []
+    fake_users = []
+
+    msg = await ctx.send(f"Processing... {len(results)}/{len(users)}")
+
+    # Function
+
+    for user in users:
+
+        link = f"https://www.steamgifts.com/user/{str(user)}"
+        r = requests.get(link)
+
+        redirected = True if r.status_code == 404 else r.url != link
+        results.append({user: redirected})
+
+        if redirected:
+            fake_users.append(user)
+        
+        await msg.edit(content=f"Processing... {len(results)}/{len(users)}")
+
+    # End function
+
     fake_users = "\n".join(fake_users)
     await ctx.send(f"**Fake users:**\n{fake_users}")
+
+    await msg.edit(content=f"Done! {len(results)}/{len(users)}")
 
 bot.run(TOKEN)
