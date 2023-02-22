@@ -4,6 +4,7 @@ from discord import message
 import platform
 import requests
 import json
+import pandas as pd
 
 from discord.ext import commands, tasks
 from dotenv import load_dotenv
@@ -19,16 +20,10 @@ bot_platform = [platform.system(), platform.release(), platform.python_version()
 
 embed_color = 0x0044bb
 
-with open("permanent_variables.json", "r") as f:      # read the json file
+with open("permanent_variables.json", "r") as f:
     permanent_variables = json.load(f)
 
 steamgifts_threads = permanent_variables['thread_links']
-
-
-# steamgifts_threads = {
-#     "main": "https://www.steamgifts.com/discussion/sjQKU/",
-#     "screenshots": "https://www.steamgifts.com/discussion/Tm80g/"
-# }
 
 # CONFIG
 bot = commands.Bot(command_prefix=prefixes, help_command=None, intents=discord.Intents.all())
@@ -45,6 +40,14 @@ def is_guild_owner():
 def ensure_dir(directory):
     if not os.path.exists(directory):
         os.makedirs(directory)
+
+def fetch_deadlines():
+    url = 'https://www.steamgifts.com/discussion/kvEdg/'
+    html = requests.get(url).content
+    df_list = pd.read_html(html)
+    df = df_list[0]
+    result = df.set_index('Assigned').T.to_dict('dict')
+    return result
 
 # def sg_names_checker(users):
 
@@ -69,6 +72,8 @@ def ensure_dir(directory):
 
 @bot.event
 async def on_ready():
+    if bot.user.id == 823385752486412290:
+        bot.command_prefix = ("fb!", "foxy!")
     print("Logged in as {}".format(bot.user, bot.command_prefix))
     print("Ready!")
     await bot.change_presence(status=discord.Status.online,
@@ -106,6 +111,36 @@ async def threads(ctx):
 async def rules(ctx):
     await ctx.send(f"{botname} recommends reading the rules! <https://steamcommunity.com/groups/SGMonthlyMagazine/discussions/3/3758852249517826899/>")
 
+@bot.command()
+async def deadline(ctx, username):
+
+    deadlines_list = fetch_deadlines()
+
+    if username in deadlines_list:
+        user_deadline = deadlines_list[username]
+
+        embedVar = discord.Embed(title=f"Deadlines for {username}", description="", color=embed_color)
+        embedVar.add_field(
+            name="Game",
+            value=user_deadline['Game'],
+            inline=False
+        )
+        embedVar.add_field(
+            name="Deadline",
+            value=user_deadline['Deadline'],
+            inline=False
+        )
+        embedVar.add_field(
+            name="Status",
+            value="https://steamcommunity.com/groups/SGMonthlyMagazine/discussions/4/3758852249517533958/",
+            inline=False
+        )
+
+        await ctx.send(embed=embedVar)
+    
+    else:
+        await ctx.send(f"No assignment found for username `{username}`!")
+
 # HELP COMMANDS
 
 @bot.command()
@@ -132,6 +167,9 @@ async def help(ctx):
 
         **rules**
         Provides a link to the rules.
+
+        **deadline** `username`
+        Checks if `username` has any task assigned this wave. Case sensitive.
         """,
         inline=True
     )
@@ -143,6 +181,9 @@ async def help(ctx):
 
         **checkusers** `usernames`
         Verifies if a list of `usernames` (separated by spaces or newlines) matches a profile on Steamgifts.
+
+        **deadlines**
+        Lists all assignments and deadlines for this wave.
         """,
         inline=True
     )
@@ -203,5 +244,22 @@ async def checkusers(ctx, *users):
     await ctx.send(f"**Fake users:**\n{fake_users}")
 
     await msg.edit(content=f"Done! {len(results)}/{len(users)}")
+
+@bot.command()
+@commands.has_any_role("Staff", "Founders", "Mad Scientist")
+async def deadlines(ctx):
+
+    deadlines_list = fetch_deadlines()
+
+    embedVar = discord.Embed(title=f"Deadlines", description="List of all assignments for this wave. Details and statuses: https://steamcommunity.com/groups/SGMonthlyMagazine/discussions/4/3758852249517533958/", color=embed_color)
+
+    for user in deadlines_list:
+        embedVar.add_field(
+            name=user,
+            value=f"- {deadlines_list[user]['Game']}\n- Deadline: {deadlines_list[user]['Deadline']}",
+            inline=False
+        )
+
+    await ctx.send(embed=embedVar)
 
 bot.run(TOKEN)
