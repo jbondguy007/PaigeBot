@@ -22,8 +22,7 @@ bot_platform = [platform.system(), platform.release(), platform.python_version()
 
 bot_color = 0x9887ff
 staff_channel = 1067986921487351820
-# bot_channel = 1077994256288981083
-bot_channel = 630835643953709066
+bot_channel = 1077994256288981083
 
 with open("permanent_variables.json", "r") as f:
     permanent_variables = json.load(f)
