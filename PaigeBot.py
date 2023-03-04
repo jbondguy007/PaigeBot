@@ -10,6 +10,7 @@ from datetime import datetime
 
 from discord.ext import commands, tasks
 from dotenv import load_dotenv
+from bs4 import BeautifulSoup as bs
 
 # BOT INFO
 
@@ -78,6 +79,20 @@ def fetch_all_giveaways():
         else:
             break
     return giveaways
+
+def fetch_group_members_count():
+    url = 'https://steamcommunity.com/groups/SGMonthlyMagazine'
+    r = requests.get(url)
+    page = bs(r.content, "html.parser")
+    member_count = page.find_all("span", {"class": "count"})[0].text
+    return member_count
+
+def convert_currency(amount, from_currency, to_currency):
+    url = f'https://v6.exchangerate-api.com/v6/ae41aad3967ad70b79397c4f/latest/{from_currency}'
+    r = requests.get(url)
+    curr = r.json()
+    result = curr['conversion_rates'][to_currency]*float(amount)
+    return result
 
 # def sg_names_checker(users):
 
@@ -159,7 +174,11 @@ async def info(ctx):
 
 @bot.command()
 async def threads(ctx):
-    await ctx.send(f"Main thread: <{steamgifts_threads['main']}>\nScreenshot of the Month thread: <{steamgifts_threads['screenshots']}>")
+    await ctx.send(f"""
+Central Hub: <{steamgifts_threads['main']}>
+Monthly SGM Edition: <{steamgifts_threads['monthly']}>
+Screenshot of the Month thread: <{steamgifts_threads['screenshots']}>
+    """)
 
 @bot.command()
 async def rules(ctx):
@@ -283,6 +302,46 @@ async def poll(ctx, content, *choices):
     for reaction in reactions[:len(choices)]:
         await embed_message.add_reaction(reaction)
 
+@bot.command()
+async def convert(ctx, amount, from_currency, to_currency):
+    result = convert_currency(float(amount), from_currency, to_currency)
+    await ctx.send(f"{result:.2f} {to_currency}")
+
+@bot.command()
+async def serverinfo(ctx):
+    server_members = int(len([x for x in ctx.guild.members if not x.bot]))
+    group_members = int(fetch_group_members_count())
+    difference = ((group_members - server_members) / server_members) * 100
+
+    staff_role = ctx.guild.get_role(1068243517857607770)
+    staff = [f"<@{usr.id}>" for usr in staff_role.members]
+
+    editor_role = ctx.guild.get_role(1068243558412341379)
+    editors = [f"<@{usr.id}>" for usr in editor_role.members]
+
+    embed = discord.Embed(title="Server Info", description=f"", color=bot_color)
+    embed.add_field(
+            name="Attendance",
+            value=f"There are `{server_members}` users in the server, and `{group_members}` members in the Steam group ({difference:.2f}% difference).",
+            inline=False
+        )
+    embed.add_field(
+            name="Staff",
+            value='\n'.join(staff),
+            inline=False
+        )
+    embed.add_field(
+            name="Editors",
+            value='\n'.join(editors),
+            inline=False
+        )
+    embed.set_footer(text=f"Server Creation Date: {ctx.guild.created_at.date()}")
+    
+    await ctx.send(
+        embed=embed,
+        allowed_mentions=discord.AllowedMentions(users=False)
+    )
+
 # HELP COMMANDS
 
 @bot.command()
@@ -290,62 +349,72 @@ async def help(ctx):
 
     threads_list = list(steamgifts_threads)
     threads_list = ", ".join(threads_list)
+    commands_list = [
+        ("test",
+         "Simple test command. Check if the bot is alive!"),
 
-    embedVar = discord.Embed(title="Commands", description="", color=bot_color)
-    embedVar.add_field(
-        name="\nPublic Commands",
-        value=f"""
-        **test**
-        Simple test command. Check if the bot is alive!
+        ("help",
+         "Displays this message."),
 
-        **help**
-        Displays this message.
+        ("info",
+         f"Information about me, {botname}!"),
 
-        **info**
-        Information about me, {botname}!
+        ("threads",
+         "Lists relevant Steamgifts threads."),
 
-        **threads**
-        Lists relevant Steamgifts threads.
+        ("rules",
+         "Provides a link to the rules."),
 
-        **rules**
-        Provides a link to the rules.
+        ("deadline `username`",
+         "Checks if `username` has any task assigned this wave. Case sensitive."),
 
-        **deadline** `username`
-        Checks if `username` has any task assigned this wave. Case sensitive.
+        ("poll `\"Poll question\" \"choice with spaces\" choicewithoutspaces etc`",
+         "Triggers a poll post in the channel where it is issued. Accepts up to 9 unique choices, each delimited by a space (unless in quotes, in which case the string in quotes becomes a choice)"),
 
-        **poll** `"Poll question"` `"choice with spaces"` `choicewithoutspaces` `etc`
-        Triggers a poll post in the channel where it is issued. Accepts up to 9 unique choices, each delimited by a space (unless in quotes, in which case the string in quotes becomes a choice)
+        ("giveaways",
+         f"Lists all current running giveaways. Spammy command, can only be issued from the <#{bot_channel}> channel."),
 
-        **giveaways**
-        Lists all current running giveaways. Spammy command, can only be issued from the <#{bot_channel}> channel.
+        ("contributors",
+         "Lists up to top 5 contributors by giveaways count."),
+        
+        ("convert `amount currency1 currency2`",
+         "Converts `amount` of `currency1` to `currency2`, accepting ISO 4217 codes: <https://en.wikipedia.org/wiki/ISO_4217>"),
+        
+        ("serverinfo",
+         "Displays the server information.")
+    ]
 
-        **contributors**
-        Lists up to top 5 contributors by giveaways count.
-        """,
-        inline=True
-    )
-    embedVar.add_field(
-        name="Staff Commands",
-        value=f"""
-        **updatethread** `thread` `link`
-        Update the `link` to a `thread` (`{threads_list}`)
+    mod_commands_list = [
+        ("updatethread `thread` `link`",
+         f"Update the `link` to a `thread` (`{threads_list}`)"),
 
-        **checkusers** `usernames`
-        Verifies if a list of `usernames` (separated by spaces or newlines) matches a profile on Steamgifts.
+        ("checkusers `usernames`",
+         "Verifies if a list of `usernames` (separated by spaces or newlines) matches a profile on Steamgifts."),
 
-        **deadlines**
-        Lists all assignments and deadlines for this wave.
-        """,
-        inline=True
-    )
+        ("deadlines",
+         "Lists all assignments and deadlines for this wave.")
+    ]
 
-    # embedVar.add_field(name="test", value="Simple test command. Check if the bot is alive!", inline=False)
-    # embedVar.add_field(name="help", value="Displays this message.", inline=False)
-    # embedVar.add_field(name="info", value=f"Information about me, {botname}!", inline=False)
-    # embedVar.add_field(name="threads", value="Lists relevant Steamgifts threads.", inline=False)
-    # embedVar.add_field(name="rules", value="Provides a link to the rules.", inline=False)
+    public_commands = discord.Embed(title="Commands", description="The below commands are available to issue anywhere within the server, except where stated otherwise.", color=bot_color)
 
-    await ctx.send(embed=embedVar)
+    moderator_commands = discord.Embed(title="Moderator Commands", description="The below commands are only permitted by users with moderator roles.", color=bot_color)
+
+    for com in commands_list:
+        public_commands.add_field(
+            name=com[0],
+            value=f"*{com[1]}*",
+            inline=False
+        )
+
+    for com in mod_commands_list:
+        moderator_commands.add_field(
+            name=com[0],
+            value=f"*{com[1]}*",
+            inline=False
+        )
+
+    await ctx.send(embed=public_commands)
+    await ctx.send(embed=moderator_commands)
 
 # MODERATOR COMMANDS
 
