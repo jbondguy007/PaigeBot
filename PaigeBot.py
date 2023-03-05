@@ -1,14 +1,15 @@
 import discord
 import os
-from discord import message
 import platform
 import requests
 import json
 import pandas as pd
 import time
-from datetime import datetime
+import re 
 
+from datetime import datetime
 from discord.ext import commands, tasks
+from discord import message
 from dotenv import load_dotenv
 from bs4 import BeautifulSoup as bs
 
@@ -79,6 +80,30 @@ def fetch_all_giveaways():
         else:
             break
     return giveaways
+
+def fetch_raw_deadlines():
+    url = 'https://steamcommunity.com/groups/SGMonthlyMagazine/discussions/4/3758852249517533958/'
+    r = requests.get(url)
+    page = bs(r.content, "html.parser")
+    deadlines = page.find_all("ul", {"class": "bb_ul"})
+
+    items = []
+    for list in deadlines:
+        for li in list.find_all('li'):
+            items.append(li.text.strip())
+    
+    deadlines_list = []
+
+    for txt in items:
+        matches = re.search(r"(.+) assigned to (.+) \[Deadline: (\d{1,2}(?:st|nd|rd|th){1} of [A-Za-z]+)(?: - (SUBMITTED|CANCELLED))?", txt)
+        deadline = {}
+        deadline['Game'] = matches.group(1)
+        deadline['Assigned'] = matches.group(2)
+        deadline['Deadline'] = matches.group(3)
+        deadline['Status'] = matches.group(4) if matches.group(4) else "In Progress"
+        deadlines_list.append(deadline)
+    
+    return deadlines_list
 
 def fetch_group_members_count():
     url = 'https://steamcommunity.com/groups/SGMonthlyMagazine'
@@ -187,40 +212,31 @@ async def rules(ctx):
 @bot.command()
 async def deadline(ctx, username):
 
-    deadlines_list = fetch_deadlines()
-    user_deadlines = {
-        key: value for key, value
-        in deadlines_list.items()
-        # If assigned user matches query username
-        if value.get('Assigned') == username
-        # And deadline date...
-        and datetime.strptime(f"{value.get('Deadline')} {datetime.now().year}", '%B %d %Y').date()
-        # ...is later than today's date
-        > datetime.today().date()
-    }
+    deadlines_list = fetch_raw_deadlines()
+    user_deadlines = [item for item in deadlines_list if item['Assigned'] == username and item['Status'] != "SUBMITTED"]
+
+    embed = discord.Embed(title=f"Deadlines for {username}", description="", color=bot_color)
 
     if user_deadlines:
+        for assignment in user_deadlines:
 
-        for game, value in user_deadlines.items():
-
-            embedVar = discord.Embed(title=f"Deadlines for {username}", description="", color=bot_color)
-            embedVar.add_field(
+            embed.add_field(
                 name="Game",
-                value=game,
+                value=assignment['Game'],
                 inline=False
             )
-            embedVar.add_field(
+            embed.add_field(
                 name="Deadline",
-                value=value['Deadline'],
+                value=assignment['Deadline'],
                 inline=False
             )
-            embedVar.add_field(
+            embed.add_field(
                 name="Status",
-                value="https://steamcommunity.com/groups/SGMonthlyMagazine/discussions/4/3758852249517533958/",
+                value=f"{assignment['Status']}\n----------",
                 inline=False
             )
 
-            await ctx.send(embed=embedVar)
+        await ctx.send(embed=embed)
     
     else:
         await ctx.send(f"No assignment found for username `{username}`!")
@@ -230,16 +246,16 @@ async def giveaways(ctx):
 
     if ctx.channel.id in [staff_channel, bot_channel]:
         giveaways = fetch_active_giveaways()
-        embedVar = discord.Embed(title="Active Giveaways", description="", color=bot_color)
+        embed = discord.Embed(title="Active Giveaways", description="", color=bot_color)
 
         for ga in giveaways:
-            embedVar.add_field(
+            embed.add_field(
                 name=ga['name'],
                 value=f"{ga['entry_count']} {'entries' if ga['entry_count'] > 1 else 'entry'} | {ga['creator']['username']}\n{ga['link'].rsplit('/', 1)[0]}/",
                 inline=False
             )
 
-        await ctx.send(embed=embedVar)
+        await ctx.send(embed=embed)
     
     else:
         await ctx.send("Spammy command, kindly issue this command from the <#1077994256288981083> channel to avoid spamming!")
@@ -263,17 +279,17 @@ async def contributors(ctx):
             v in ordered_dict.items()
         ]
 
-    embedVar = discord.Embed(title="Top Contributors", description="By giveaways count", color=bot_color)
+    embed = discord.Embed(title="Top Contributors", description="By giveaways count", color=bot_color)
 
     for user in to_list[:5]:
         if user[1] > 1:
-            embedVar.add_field(
+            embed.add_field(
                 name=user[0],
                 value=user[1],
                 inline=False
             )
 
-    await ctx.send(embed=embedVar)
+    await ctx.send(embed=embed)
 
 @bot.command()
 async def poll(ctx, content, *choices):
@@ -287,25 +303,35 @@ async def poll(ctx, content, *choices):
 
     reactions = ["🇦", "🇧", "🇨", "🇩", "🇪", "🇫", "🇬", "🇭", "🇮"]
 
-    embedVar = discord.Embed(title=content, description=f"Poll by {ctx.author.name}", color=bot_color)
+    embed = discord.Embed(title=content, description=f"Poll by {ctx.author.name}", color=bot_color)
     for i, choice in enumerate(choices):
-        embedVar.add_field(
+        embed.add_field(
             name=choice,
             value=reactions[i]
         )
-    embedVar.set_footer(text=f"Poll reference ID: NOT_FOUND")
+    embed.set_footer(text=f"Poll reference ID: NOT_FOUND")
 
-    embed_message = await ctx.send(embed=embedVar)
-    embedVar.set_footer(text=f"Poll reference ID: {str(embed_message.id)}")
-    await embed_message.edit(embed=embedVar)
+    embed_message = await ctx.send(embed=embed)
+    embed.set_footer(text=f"Poll reference ID: {str(embed_message.id)}")
+    await embed_message.edit(embed=embed)
 
     for reaction in reactions[:len(choices)]:
         await embed_message.add_reaction(reaction)
 
 @bot.command()
 async def convert(ctx, amount, from_currency, to_currency):
-    result = convert_currency(float(amount), from_currency, to_currency)
-    await ctx.send(f"{result:.2f} {to_currency}")
+    if from_currency.upper() in ['C', 'F'] and to_currency.upper() in ['C', 'F']:
+
+        if from_currency.upper() == 'F':
+            result = (float(amount)-32.0)*.5556
+        else:
+            result = (float(amount)*1.8) + 32.0
+        
+        await ctx.send(f"{round(result, 2)} {to_currency.upper()}")
+
+    else:
+        result = convert_currency(float(amount), from_currency, to_currency)
+        await ctx.send(f"{result:.2f} {to_currency.upper()}")
 
 @bot.command()
 async def serverinfo(ctx):
@@ -379,6 +405,9 @@ async def help(ctx):
         
         ("convert `amount currency1 currency2`",
          "Converts `amount` of `currency1` to `currency2`, accepting ISO 4217 codes: <https://en.wikipedia.org/wiki/ISO_4217>"),
+        
+        ("convert `amount F C`",
+         "Converts `amount` of `F` (Fahrenheit) to `C` (Celsius). Also converts Celsius to Fahrenheit by swapping F and C."),
         
         ("serverinfo",
          "Displays the server information.")
@@ -469,19 +498,27 @@ async def checkusers(ctx, *users):
 @commands.has_any_role("Staff", "Founders")
 async def deadlines(ctx):
 
-    deadlines_list = fetch_deadlines()
+    deadlines_list = fetch_raw_deadlines()
 
-    embedVar = discord.Embed(title=f"Deadlines", description="List of all current assignments. Details and statuses: https://steamcommunity.com/groups/SGMonthlyMagazine/discussions/4/3758852249517533958/", color=bot_color)
+    deadlines = [item for item in deadlines_list if item['Status'] not in ['SUBMITTED', 'CANCELLED']]
 
-    for user in deadlines_list:
-        deadline_date = datetime.strptime(deadlines_list[user]['Deadline'], '%B %d').strftime('%m/%d')
-        if deadline_date > datetime.today().strftime('%m/%d'):
-            embedVar.add_field(
-                name=user,
-                value=f"- {deadlines_list[user]['Game']}\n- Deadline: {deadlines_list[user]['Deadline']}",
-                inline=False
-            )
+    embed = discord.Embed(title=f"Deadlines", description="List of all current assignments, excluding submitted or cancelled.", color=bot_color)
 
-    await ctx.send(embed=embedVar)
+    for assignment in deadlines:
+
+        match = re.search(r'\b(\d+)(st|nd|rd|th)\b', assignment['Deadline'])
+        day = match.group(1)
+        date = datetime.strptime(assignment['Deadline'].replace(match.group(), ''), ' of %B')
+        date = date.replace(day=int(day))
+
+        is_past_due = ":warning:" if datetime.strptime(f"{date.strftime('%B %d')} {datetime.now().year}", '%B %d %Y').date() < datetime.today().date() else ""
+
+        embed.add_field(
+            name=f"{assignment['Game']}{is_past_due}",
+            value=f"• Assigned: `{assignment['Assigned']}`\n• Deadline: `{assignment['Deadline']}`\n• Status: `{assignment['Status']}`",
+            inline=True
+        )
+
+    await ctx.send(embed=embed)
 
 bot.run(TOKEN)
