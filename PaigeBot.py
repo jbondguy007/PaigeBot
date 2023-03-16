@@ -575,7 +575,7 @@ async def check_for_new_giveaways():
 
         embed.add_field(
             name=f"From {ga['creator']['username']}",
-            value=f"{ga['link'].rsplit('/', 1)[0]}",
+            value=f"{ga['link'].rsplit('/', 1)[0]}/",
             inline=False
         )
 
