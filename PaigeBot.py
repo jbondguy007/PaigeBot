@@ -26,9 +26,15 @@ bot_color = 0x9887ff
 staff_channel = 1067986921487351820
 bot_channel = 1077994256288981083
 
+# Roles
+
+role_fullmember = 1067986921038549022
+role_reviewer = 1067986921021788269
+
 with open("permanent_variables.json", "r") as f:
     permanent_variables = json.load(f)
 steamgifts_threads = permanent_variables['thread_links']
+last_checked_active_ga_id = permanent_variables['last_checked_active_ga_id']
 
 # CONFIG
 bot = commands.Bot(command_prefix=prefixes, help_command=None, intents=discord.Intents.all())
@@ -61,11 +67,18 @@ def fetch_giveaways(page=1):
     return giveaways
 
 def fetch_active_giveaways():
-    active_giveaways = []
+    active_giveaways = {
+        'ongoing': [],
+        'oncoming': []
+    }
     giveaways = fetch_giveaways()
     for ga in giveaways['results']:
         if int(ga['end_timestamp']) > int(time.time()):
-            active_giveaways.append(ga)
+            if int(ga['start_timestamp']) > int(time.time()):
+                active_giveaways['oncoming'].append(ga)
+            else:
+                active_giveaways['ongoing'].append(ga)
+            
     return active_giveaways
 
 def fetch_all_giveaways():
@@ -149,9 +162,12 @@ async def on_ready():
     await bot.change_presence(status=discord.Status.online,
         activity=discord.Activity(name="for prefix: p!", type=discord.ActivityType.watching))
     
+    check_for_new_giveaways.start()
+    
 @bot.event
 async def on_command_error(ctx, error):
-    await ctx.send("<:warning:1077420799713087559> Failure to process:\n`{}`".format(str(error)))
+    print(f"ERROR: {str(error)}")
+    await ctx.send(f"<:warning:1077420799713087559> Failure to process:\n`{str(error)}`")
 
 # ON MESSAGE
 
@@ -160,6 +176,8 @@ async def on_message(message):
     
     if message.author == bot.user:
         return
+    
+    print(f"{message.created_at} | #{message.channel} | @{message.author} | {message.content}\n")
 
     await bot.process_commands(message)
 
@@ -250,21 +268,29 @@ async def deadline(ctx, username):
 @bot.command()
 async def giveaways(ctx):
 
-    if ctx.channel.id in [staff_channel, bot_channel]:
-        giveaways = fetch_active_giveaways()
-        embed = discord.Embed(title="Active Giveaways", description="", color=bot_color)
+    giveaways = fetch_active_giveaways()
 
-        for ga in giveaways:
-            embed.add_field(
-                name=ga['name'],
-                value=f"{ga['entry_count']} {'entries' if ga['entry_count'] > 1 else 'entry'} | {ga['creator']['username']}\n{ga['link'].rsplit('/', 1)[0]}/",
-                inline=False
-            )
+    ongoing_embed = discord.Embed(title="Active Giveaways", description="", color=bot_color)
 
-        await ctx.send(embed=embed)
+    for ga in giveaways['ongoing']:
+        ongoing_embed.add_field(
+            name=ga['name'],
+            value=f"{ga['entry_count']} {'entries' if ga['entry_count'] > 1 else 'entry'} | {ga['creator']['username']}\n{ga['link'].rsplit('/', 1)[0]}/",
+            inline=False
+        )
     
-    else:
-        await ctx.send("Spammy command, kindly issue this command from the <#1077994256288981083> channel to avoid spamming!")
+    oncoming_embed = discord.Embed(title="Oncoming Giveaways", description="", color=bot_color)
+
+    for ga in giveaways['oncoming']:
+        start_time = datetime.fromtimestamp(ga['start_timestamp']).strftime('%b %d')
+        oncoming_embed.add_field(
+            name=ga['name'],
+            value=f"{start_time} | {ga['creator']['username']}\n{ga['link'].rsplit('/', 1)[0]}/",
+            inline=False
+        )
+
+    await ctx.send(embed=ongoing_embed)
+    await ctx.send(embed=oncoming_embed)
 
 @bot.command()
 async def contributors(ctx):
@@ -526,5 +552,32 @@ async def deadlines(ctx):
         )
 
     await ctx.send(embed=embed)
+
+# TASKS
+
+@tasks.loop(minutes=10)
+async def check_for_new_giveaways():
+
+    global last_checked_active_ga_id
+
+    ga = fetch_active_giveaways()['ongoing'][0]
+
+    if ga['id'] != last_checked_active_ga_id:
+
+        last_checked_active_ga_id = ga['id']
+        permanent_variables['last_checked_active_ga_id'] = ga['id']
+        with open("permanent_variables.json", "w") as f:      # write back to the json file
+            json.dump(permanent_variables, f)
+
+        embed = discord.Embed(title=f"{ga['name']}", description="", color=bot_color)
+
+        embed.add_field(
+            name=f"From {ga['creator']['username']}",
+            value=f"{ga['link'].rsplit('/', 1)[0]}",
+            inline=False
+        )
+
+        channel = bot.get_channel(630835643953709066)
+        await channel.send(content=f'<@{role_fullmember}> <@{role_reviewer}>', embed=embed)
 
 bot.run(TOKEN)
