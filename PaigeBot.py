@@ -580,6 +580,6 @@ async def check_for_new_giveaways():
         )
 
         channel = bot.get_channel(giveaway_notifications_channel)
-        await channel.send(content=f'<@&{role_fullmember}> <@{role_reviewer}>', embed=embed)
+        await channel.send(content=f'<@&{role_fullmember}> <@&{role_reviewer}>', embed=embed)
 
 bot.run(TOKEN)
