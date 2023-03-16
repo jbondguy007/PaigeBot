@@ -23,8 +23,10 @@ bot_platform = [platform.system(), platform.release(), platform.python_version()
 # VARIABLES
 
 bot_color = 0x9887ff
+
 staff_channel = 1067986921487351820
 bot_channel = 1077994256288981083
+giveaway_notifications_channel = 1086014406091100201
 
 # Roles
 
@@ -577,7 +579,7 @@ async def check_for_new_giveaways():
             inline=False
         )
 
-        channel = bot.get_channel(630835643953709066)
+        channel = bot.get_channel(giveaway_notifications_channel)
         await channel.send(content=f'<@{role_fullmember}> <@{role_reviewer}>', embed=embed)
 
 bot.run(TOKEN)
