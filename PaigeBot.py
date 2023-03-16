@@ -189,6 +189,12 @@ async def on_raw_reaction_add(payload):
 # COMMANDS
 
 @bot.command()
+async def say(ctx, channel_id, what):
+    if ctx.author.id == 172522306147581952:
+        channel = bot.get_channel(int(channel_id))
+        await channel.send(what)
+
+@bot.command()
 async def test(ctx):
     await ctx.send("Test successful.")
 
