@@ -566,7 +566,13 @@ async def check_for_new_giveaways():
 
     global last_checked_active_ga_id
 
-    ga = fetch_active_giveaways()['ongoing'][0]
+    ga = fetch_active_giveaways()['ongoing']
+
+    if ga:
+        ga = fetch_active_giveaways()['ongoing'][0]
+    else:
+        print(f"No active giveaways detected. Aborting...")
+        return
 
     print(f"Latest giveaway detected: {ga['name']} ({str(ga['id'])})")
 
