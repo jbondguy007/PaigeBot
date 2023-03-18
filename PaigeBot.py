@@ -28,6 +28,8 @@ staff_channel = 1067986921487351820
 bot_channel = 1077994256288981083
 giveaway_notifications_channel = 1086014406091100201
 
+test_server_channel = 630835643953709066
+
 # Roles
 
 role_fullmember = 1067986921038549022
@@ -560,11 +562,17 @@ async def deadlines(ctx):
 @tasks.loop(minutes=10)
 async def check_for_new_giveaways():
 
+    print(f"check_for_new_giveaways() triggered...")
+
     global last_checked_active_ga_id
 
     ga = fetch_active_giveaways()['ongoing'][0]
 
+    print(f"Latest giveaway detected: {ga['name']} ({str(ga['id'])})")
+
     if ga['id'] != last_checked_active_ga_id:
+
+        print(f"Giveaway {ga['name']} ({str(ga['id'])}) id is different from last checked {last_checked_active_ga_id}. Processing...")
 
         last_checked_active_ga_id = ga['id']
         permanent_variables['last_checked_active_ga_id'] = ga['id']
@@ -578,8 +586,10 @@ async def check_for_new_giveaways():
             value=f"{ga['link'].rsplit('/', 1)[0]}/",
             inline=False
         )
-
+        print(f"Sending to channel...")
         channel = bot.get_channel(giveaway_notifications_channel)
         await channel.send(content=f'<@&{role_fullmember}> <@&{role_reviewer}>', embed=embed)
+    else:
+        print(f"Giveaway {ga['name']} ({str(ga['id'])}) id is NOT different from last checked {last_checked_active_ga_id}. Update cancelled.")
 
 bot.run(TOKEN)
