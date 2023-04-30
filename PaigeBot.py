@@ -561,7 +561,7 @@ async def check_for_new_giveaways():
         
         # Append giveaway to the beginning of last_checked_active_ga_ids. If the list is longer than 20, remove the last item.
         last_checked_active_ga_ids.insert(0, [ga['id'], ga['name']])
-        if len(last_checked_active_ga_ids) > 20:
+        if len(last_checked_active_ga_ids) > 50:
             last_checked_active_ga_ids.pop()
         
         embed = discord.Embed(title=f"{ga['name']}", description="", color=bot_color)
