@@ -38,7 +38,7 @@ role_reviewer = 1067986921021788269
 with open("permanent_variables.json", "r") as f:
     permanent_variables = json.load(f)
 steamgifts_threads = permanent_variables['thread_links']
-last_checked_active_ga_id = permanent_variables['last_checked_active_ga_id']
+last_checked_active_ga_ids = permanent_variables['last_checked_active_ga_ids']
 
 # CONFIG
 bot = commands.Bot(command_prefix=prefixes, help_command=None, intents=discord.Intents.all())
@@ -55,14 +55,6 @@ def is_guild_owner():
 def ensure_dir(directory):
     if not os.path.exists(directory):
         os.makedirs(directory)
-
-def fetch_deadlines():
-    url = 'https://www.steamgifts.com/discussion/kvEdg/'
-    html = requests.get(url).content
-    df_list = pd.read_html(html)
-    df = pd.concat(df_list)
-    result = df.set_index('Game').T.to_dict('dict')
-    return result
 
 def fetch_giveaways(page=1):
     url = f'https://www.steamgifts.com/group/X4YE7/sgmonthlymagazine?format=json&page={str(page)}'
@@ -135,25 +127,6 @@ def convert_currency(amount, from_currency, to_currency):
     curr = r.json()
     result = curr['conversion_rates'][to_currency]*float(amount)
     return result
-
-# def sg_names_checker(users):
-
-#     results = []
-#     fake_users = []
-
-#     for user in users:
-
-#         link = f"https://www.steamgifts.com/user/{str(user)}"
-
-#         r = requests.get(link)
-#         redirected = True if r.status_code == 404 else r.url != link
-
-#         results.append({user: redirected})
-
-#         if redirected:
-#             fake_users.append(user)
-    
-#     return(fake_users)
 
 # BOT EVENTS
 
@@ -562,29 +535,35 @@ async def deadlines(ctx):
 @tasks.loop(minutes=10)
 async def check_for_new_giveaways():
 
-    print(f"check_for_new_giveaways() triggered...")
+    print(f"CHECK: check_for_new_giveaways() triggered...")
 
-    global last_checked_active_ga_id
+    global last_checked_active_ga_ids
+    giveaways = fetch_active_giveaways()['ongoing']
 
-    ga = fetch_active_giveaways()['ongoing']
-
-    if ga:
-        ga = fetch_active_giveaways()['ongoing'][0]
-    else:
-        print(f"No active giveaways detected. Aborting...")
+    if not giveaways:
+        print(f"ABORT: No active giveaways detected. Aborting...")
         return
 
-    print(f"Latest giveaway detected: {ga['name']} ({str(ga['id'])})")
+    # channel = bot.get_channel(630835643953709066)
+    channel = bot.get_channel(giveaway_notifications_channel)
 
-    if ga['id'] != last_checked_active_ga_id:
+    await channel.send(f"<@&{role_fullmember}> <@&{role_reviewer}> One or more new giveaways are live! <:paigehappy:1080230055311061152>\nProcessing...")
 
-        print(f"Giveaway {ga['name']} ({str(ga['id'])}) id is different from last checked {last_checked_active_ga_id}. Processing...")
+    for ga in giveaways:
 
-        last_checked_active_ga_id = ga['id']
-        permanent_variables['last_checked_active_ga_id'] = ga['id']
-        with open("permanent_variables.json", "w") as f:      # write back to the json file
-            json.dump(permanent_variables, f)
+        # If the giveaway was already in the last check, do nothing
+        if any(ga['id'] in sl for sl in last_checked_active_ga_ids):
+            print(f"SKIP: {ga['name']} ({str(ga['id'])}) already sent, skipping...")
+            continue
 
+        else:
+            print(f"PROCESSING: Giveaway {ga['name']} ({str(ga['id'])}) is missing from list of last checked giveaways. Adding to queue...")
+        
+        # Append giveaway to the beginning of last_checked_active_ga_ids. If the list is longer than 20, remove the last item.
+        last_checked_active_ga_ids.insert(0, [ga['id'], ga['name']])
+        if len(last_checked_active_ga_ids) > 20:
+            last_checked_active_ga_ids.pop()
+        
         embed = discord.Embed(title=f"{ga['name']}", description="", color=bot_color)
 
         embed.add_field(
@@ -592,10 +571,15 @@ async def check_for_new_giveaways():
             value=f"{ga['link'].rsplit('/', 1)[0]}/",
             inline=False
         )
-        print(f"Sending to channel...")
-        channel = bot.get_channel(giveaway_notifications_channel)
-        await channel.send(content=f'<@&{role_fullmember}> <@&{role_reviewer}>', embed=embed)
-    else:
-        print(f"Giveaway {ga['name']} ({str(ga['id'])}) id is NOT different from last checked {last_checked_active_ga_id}. Update cancelled.")
+        print(f"SENDING: Sending {ga['name']} ({str(ga['id'])}) to channel...")
+
+        await channel.send(embed=embed)
+
+    # Update last_checked_active_ga_ids
+    permanent_variables['last_checked_active_ga_ids'] = last_checked_active_ga_ids
+    with open("permanent_variables.json", "w") as f:
+        json.dump(permanent_variables, f)
+
+    print(f"Done!")
 
 bot.run(TOKEN)
