@@ -539,15 +539,13 @@ async def check_for_new_giveaways():
 
     global last_checked_active_ga_ids
     giveaways = fetch_active_giveaways()['ongoing']
+    new_giveaways_list = []
+    channel = bot.get_channel(630835643953709066)
+    # channel = bot.get_channel(giveaway_notifications_channel)
 
     if not giveaways:
-        print(f"ABORT: No active giveaways detected. Aborting...")
+        print("ABORT: No active giveaways detected. Aborting...")
         return
-
-    # channel = bot.get_channel(630835643953709066)
-    channel = bot.get_channel(giveaway_notifications_channel)
-
-    await channel.send(f"<@&{role_fullmember}> <@&{role_reviewer}> One or more new giveaways are live! <:paigehappy:1080230055311061152>\nProcessing...")
 
     for ga in giveaways:
 
@@ -555,31 +553,42 @@ async def check_for_new_giveaways():
         if any(ga['id'] in sl for sl in last_checked_active_ga_ids):
             print(f"SKIP: {ga['name']} ({str(ga['id'])}) already sent, skipping...")
             continue
-
+        # Otherwise, add the giveaway to the queue
         else:
             print(f"PROCESSING: Giveaway {ga['name']} ({str(ga['id'])}) is missing from list of last checked giveaways. Adding to queue...")
-        
-        # Append giveaway to the beginning of last_checked_active_ga_ids. If the list is longer than 20, remove the last item.
-        last_checked_active_ga_ids.insert(0, [ga['id'], ga['name']])
-        if len(last_checked_active_ga_ids) > 50:
-            last_checked_active_ga_ids.pop()
-        
-        embed = discord.Embed(title=f"{ga['name']}", description="", color=bot_color)
+            new_giveaways_list.append(ga)
 
-        embed.add_field(
-            name=f"From {ga['creator']['username']}",
-            value=f"{ga['link'].rsplit('/', 1)[0]}/",
-            inline=False
-        )
-        print(f"SENDING: Sending {ga['name']} ({str(ga['id'])}) to channel...")
+    # After checking each giveaway, check if the queue has items.
+    # If it does, process them.
+    if new_giveaways_list:
 
-        await channel.send(embed=embed)
+        await channel.send(f"<@&{role_fullmember}> <@&{role_reviewer}> One or more new giveaways are live! <:paigehappy:1080230055311061152>\nProcessing...")
 
-    # Update last_checked_active_ga_ids
-    permanent_variables['last_checked_active_ga_ids'] = last_checked_active_ga_ids
-    with open("permanent_variables.json", "w") as f:
-        json.dump(permanent_variables, f)
+        for ga in new_giveaways_list:
 
-    print(f"Done!")
+            # Add the giveaway to last_checked_active_ga_ids.
+            last_checked_active_ga_ids.append( [ga['id'], ga['name']] )
+            
+            embed = discord.Embed(title=f"{ga['name']}", description="", color=bot_color)
+            embed.add_field(
+                name=f"From {ga['creator']['username']}",
+                value=f"{ga['link'].rsplit('/', 1)[0]}/",
+                inline=False
+            )
+
+            print(f"SENDING: Sending {ga['name']} ({str(ga['id'])}) to channel...")
+
+            await channel.send(embed=embed)
+
+        # Update last_checked_active_ga_ids
+        last_checked_active_ga_ids = last_checked_active_ga_ids[-50:]
+        permanent_variables['last_checked_active_ga_ids'] = last_checked_active_ga_ids
+        with open("permanent_variables.json", "w") as f:
+            json.dump(permanent_variables, f)
+    
+    else:
+        print("ABORT: No new giveaways detected.")
+
+    print("Done!")
 
 bot.run(TOKEN)
