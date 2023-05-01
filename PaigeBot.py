@@ -540,8 +540,8 @@ async def check_for_new_giveaways():
     global last_checked_active_ga_ids
     giveaways = fetch_active_giveaways()['ongoing']
     new_giveaways_list = []
-    channel = bot.get_channel(630835643953709066)
-    # channel = bot.get_channel(giveaway_notifications_channel)
+    # channel = bot.get_channel(630835643953709066)
+    channel = bot.get_channel(giveaway_notifications_channel)
 
     if not giveaways:
         print("ABORT: No active giveaways detected. Aborting...")
