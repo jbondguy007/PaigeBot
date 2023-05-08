@@ -7,7 +7,7 @@ import pandas as pd
 import time
 import re
 import python_weather
-import country_converter as coco
+# import country_converter as coco
 import traceback
 
 from datetime import datetime
@@ -482,8 +482,9 @@ async def weather(ctx, *location):
 
         weather = await client.get(location)
         city = weather.nearest_area.name
-        region = ''.join([c for c in weather.nearest_area.region if c.isupper()])
-        country = coco.convert(names=weather.nearest_area.country, to='ISO2')
+        region = weather.nearest_area.region
+        # country = coco.convert(names=weather.nearest_area.country, to='ISO2')
+        country = weather.nearest_area.country
         temp = weather.current.temperature
 
         if weather.current.temperature < 0:
