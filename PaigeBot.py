@@ -5,7 +5,10 @@ import requests
 import json
 import pandas as pd
 import time
-import re 
+import re
+import python_weather
+import country_converter as coco
+import traceback
 
 from datetime import datetime
 from discord.ext import commands, tasks
@@ -128,6 +131,73 @@ def convert_currency(amount, from_currency, to_currency):
     result = curr['conversion_rates'][to_currency]*float(amount)
     return result
 
+def fetch_appid_info(AppID):
+    url = f'https://store.steampowered.com/api/appdetails?appids={AppID}&format=json'
+    r = requests.get(url)
+    game_info = r.json()
+    game_info = game_info[AppID]
+
+    # type, name, steam_appid, required_age, is_free, detailed_description, about_the_game, short_description, [...]
+    # price_overview [currency, initial, final, discount_percent]
+
+    if game_info['success']:
+        return game_info['data']
+    else:
+        return None
+
+def fetch_sg_wishlists(AppID):
+    game_info = fetch_appid_info(AppID)
+    if not game_info:
+        return (None, 0)
+    game_title = game_info['name']
+    url = f'https://www.steamgifts.com/group/X4YE7/sgmonthlymagazine/wishlist/search?q={game_title}'
+    r = requests.get(url)
+    page = bs(r.content, "html.parser")
+    search_result = page.find_all("div", {"class": "table__row-outer-wrap"})
+
+    if search_result:
+
+        for result in search_result:
+
+            applink = result.find('a', {"class": "table__column__secondary-link"}).text
+            appidfromlink = re.search("\d+", applink)[0].strip()
+
+            if int(AppID) == int(appidfromlink):
+                wishlist_count = result.find('div', {"class": "table__column--width-small text-center"}).text.strip()
+                return (game_info, wishlist_count)
+            else:
+                continue
+    
+    else:
+        return (game_info, '0')
+
+def check_sg_bundled_list(AppID):
+    game_info = fetch_appid_info(AppID)
+    if not game_info:
+        return (None, 0)
+    game_title = game_info['name']
+    url = f'https://www.steamgifts.com/bundle-games/search?q={game_title}'
+    r = requests.get(url)
+    page = bs(r.content, "html.parser")
+    search_result = page.find_all("div", {"class": "table__row-outer-wrap"})
+
+    if search_result:
+
+        for result in search_result:
+
+            applink = result.find('a', {"class": "table__column__secondary-link"}).text
+            appidfromlink = re.search("\d+", applink)[0].strip()
+
+            if int(AppID) == int(appidfromlink):
+                return True
+            else:
+                continue
+        
+        return False
+    
+    else:
+        return False
+
 # BOT EVENTS
 
 @bot.event
@@ -241,6 +311,32 @@ async def deadline(ctx, username):
     
     else:
         await ctx.send(f"No assignment found for username `{username}`!")
+
+@bot.command()
+async def deadlines(ctx):
+
+    deadlines_list = fetch_raw_deadlines()
+
+    deadlines = [item for item in deadlines_list if item['Status'] not in ['SUBMITTED', 'CANCELLED']]
+
+    embed = discord.Embed(title=f"Deadlines", description="List of all current assignments, excluding submitted or cancelled.", color=bot_color)
+
+    for assignment in deadlines:
+
+        match = re.search(r'\b(\d+)(st|nd|rd|th)\b', assignment['Deadline'])
+        day = match.group(1)
+        date = datetime.strptime(assignment['Deadline'].replace(match.group(), ''), ' of %B')
+        date = date.replace(day=int(day))
+
+        is_past_due = ":warning:" if datetime.strptime(f"{date.strftime('%B %d')} {datetime.now().year}", '%B %d %Y').date() < datetime.today().date() else ""
+
+        embed.add_field(
+            name=f"{assignment['Game']}{is_past_due}",
+            value=f"• Assigned: `{assignment['Assigned']}`\n• Deadline: `{assignment['Deadline']}`\n• Status: `{assignment['Status']}`",
+            inline=True
+        )
+
+    await ctx.send(embed=embed)
 
 @bot.command()
 async def giveaways(ctx):
@@ -377,6 +473,109 @@ async def serverinfo(ctx):
         allowed_mentions=discord.AllowedMentions(users=False)
     )
 
+@bot.command()
+async def weather(ctx, *location):
+
+    location = ' '.join(location)
+
+    async with python_weather.Client(unit=python_weather.METRIC) as client:
+
+        weather = await client.get(location)
+        city = weather.nearest_area.name
+        region = ''.join([c for c in weather.nearest_area.region if c.isupper()])
+        country = coco.convert(names=weather.nearest_area.country, to='ISO2')
+        temp = weather.current.temperature
+
+        if weather.current.temperature < 0:
+            quip = "It's freezing, wear multiple layers!"
+        elif 0 <= weather.current.temperature <= 8:
+            quip = "It's chilly. Wear a jacket!"
+        elif 8 <= weather.current.temperature <= 15:
+            quip = "It's a pretty comfortable temperature, but you might want to wear a sweater."
+        elif 15 <= weather.current.temperature <= 23:
+            quip = "Enjoy the comfy temperature!"
+        else:
+            quip = "It's pretty warm out there!"
+        
+        await ctx.send(f"The current temperature in {city}, {region}, {country} is {temp}c (feels like {weather.current.feels_like}c).\n{weather.current.description}. {weather.current.kind.emoji} | {quip}")
+
+@bot.command()
+async def game(ctx, AppID, price=None):
+
+    game, wishlists = fetch_sg_wishlists(AppID)
+    optional_premium_threshold = 4000
+    mandatory_premium_threshold = 8000
+
+    if game:
+        # await ctx.send(f"{game['name']}"+f"{' | '+str(game['price_overview']['final_formatted']) if game.get('price_overview', False) else ''}"+f"\nWishlisted by **{wishlists}** members")
+
+        if not game['price_overview']['currency'] == 'CAD':
+            await ctx.send(f"Unable to determine price score as the Steam API returned the incorrect currency. (Expected `CAD`, got `{game['price_overview']['currency']}`)\nPlease wait before trying again, or issue the command along with the pricing (in CAD for more accurate results):\n`game {AppID} 00.00` (Any format is accepted, but must include all digits including cents)")
+            return
+        
+        await ctx.send("Processing...")
+
+        if price:
+            price = ''.join(i for i in price if i.isdigit())
+            price_score = int(price)
+        else:
+            price_score = game['price_overview']['initial']
+        members_count = fetch_group_members_count()
+        wishlist_modifier = (float(wishlists)/float(members_count))
+
+        bundled = check_sg_bundled_list(AppID)
+
+        if not bundled:
+            bundled_modifier = 2.0
+        else:
+            bundled_modifier = 1.0
+
+        score = price_score * (bundled_modifier + wishlist_modifier)
+
+        if round(score) > mandatory_premium_threshold:
+            premium_eligibility = "✅ Mandatory"
+        elif round(score) > optional_premium_threshold:
+            premium_eligibility = "🆗 Optional"
+        else:
+            premium_eligibility = "❌ No"
+
+        embed = discord.Embed(title=game['name'], description=f"https://store.steampowered.com/app/{game['steam_appid']}", color=bot_color)
+
+        embed.add_field(
+            name="Price Score",
+            value=f"{price_score} (currently {game['price_overview']['discount_percent']}% off)" if game['price_overview'].get('discount_percent') else f"{price_score}",
+            inline=False
+        )
+        embed.add_field(
+            name="Bundled?",
+            value=f"{bundled} (+{bundled_modifier} to multiplier)",
+            inline=False
+        )
+        embed.add_field(
+            name="Wishlists Modifier",
+            value=f"+{round(wishlist_modifier, 2)} ({wishlists}/{members_count} members wishlisted)",
+            inline=False
+        )
+        embed.add_field(
+            name="Final Multiplier",
+            value=f"x{round((bundled_modifier + wishlist_modifier), 2)}",
+            inline=False
+        )
+        embed.add_field(
+            name="Value Score",
+            value=f"{round(score)}",
+            inline=False
+        )
+        embed.add_field(
+            name="Premium Giveaway Eligibility",
+            value=f"{premium_eligibility}",
+            inline=False
+        )
+        await ctx.send(embed=embed)
+
+    else:
+        await ctx.send("No game found with this AppID!")
+
 # HELP COMMANDS
 
 @bot.command()
@@ -402,6 +601,9 @@ async def help(ctx):
 
         ("deadline `username`",
          "Checks if `username` has any task assigned this wave. Case sensitive."),
+        
+        ("deadlines",
+         "Lists all assignments and deadlines for this wave."),
 
         ("poll `\"Poll question\" \"choice with spaces\" choicewithoutspaces etc`",
          "Triggers a poll post in the channel where it is issued. Accepts up to 9 unique choices, each delimited by a space (unless in quotes, in which case the string in quotes becomes a choice)"),
@@ -419,7 +621,13 @@ async def help(ctx):
          "Converts `amount` of `F` (Fahrenheit) to `C` (Celsius). Also converts Celsius to Fahrenheit by swapping F and C."),
         
         ("serverinfo",
-         "Displays the server information.")
+         "Displays the server information."),
+
+        ("weather `location`",
+         "Fetches the current weather for `location`."),
+        
+        ("game `AppID price`",
+         "Takes a Steam `AppID` and calculates the game's desirability score, indicating if it should be considered a premium giveaway. `price` argument optional in case API fails.")
     ]
 
     mod_commands_list = [
@@ -428,9 +636,6 @@ async def help(ctx):
 
         ("checkusers `usernames`",
          "Verifies if a list of `usernames` (separated by spaces or newlines) matches a profile on Steamgifts."),
-
-        ("deadlines",
-         "Lists all assignments and deadlines for this wave.")
     ]
 
     public_commands = discord.Embed(title="Commands", description="The below commands are available to issue anywhere within the server, except where stated otherwise.", color=bot_color)
@@ -503,37 +708,13 @@ async def checkusers(ctx, *users):
 
     await msg.edit(content=f"Done! {len(results)}/{len(users)}")
 
-@bot.command()
-@commands.has_any_role("Staff", "Founders")
-async def deadlines(ctx):
-
-    deadlines_list = fetch_raw_deadlines()
-
-    deadlines = [item for item in deadlines_list if item['Status'] not in ['SUBMITTED', 'CANCELLED']]
-
-    embed = discord.Embed(title=f"Deadlines", description="List of all current assignments, excluding submitted or cancelled.", color=bot_color)
-
-    for assignment in deadlines:
-
-        match = re.search(r'\b(\d+)(st|nd|rd|th)\b', assignment['Deadline'])
-        day = match.group(1)
-        date = datetime.strptime(assignment['Deadline'].replace(match.group(), ''), ' of %B')
-        date = date.replace(day=int(day))
-
-        is_past_due = ":warning:" if datetime.strptime(f"{date.strftime('%B %d')} {datetime.now().year}", '%B %d %Y').date() < datetime.today().date() else ""
-
-        embed.add_field(
-            name=f"{assignment['Game']}{is_past_due}",
-            value=f"• Assigned: `{assignment['Assigned']}`\n• Deadline: `{assignment['Deadline']}`\n• Status: `{assignment['Status']}`",
-            inline=True
-        )
-
-    await ctx.send(embed=embed)
-
 # TASKS
 
 @tasks.loop(minutes=10)
 async def check_for_new_giveaways():
+
+    if bot.user.id == 823385752486412290:
+        return
 
     print(f"CHECK: check_for_new_giveaways() triggered...")
 
