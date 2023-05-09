@@ -148,7 +148,7 @@ def fetch_appid_info(AppID):
 def fetch_sg_wishlists(AppID):
     game_info = fetch_appid_info(AppID)
     if not game_info:
-        return (None, 0)
+        return (None, '0')
     game_title = game_info['name']
     url = f'https://www.steamgifts.com/group/X4YE7/sgmonthlymagazine/wishlist/search?q={game_title}'
     r = requests.get(url)
@@ -167,15 +167,14 @@ def fetch_sg_wishlists(AppID):
                 return (game_info, wishlist_count)
             else:
                 continue
+        
+        return (game_info, '0')
     
     else:
         return (game_info, '0')
 
-def check_sg_bundled_list(AppID):
-    game_info = fetch_appid_info(AppID)
-    if not game_info:
-        return (None, 0)
-    game_title = game_info['name']
+def check_sg_bundled_list(AppID, game_title):
+
     url = f'https://www.steamgifts.com/bundle-games/search?q={game_title}'
     r = requests.get(url)
     page = bs(r.content, "html.parser")
@@ -503,79 +502,84 @@ async def weather(ctx, *location):
 @bot.command()
 async def game(ctx, AppID, price=None):
 
-    game, wishlists = fetch_sg_wishlists(AppID)
+    query = fetch_sg_wishlists(AppID)
+    if query:
+        game, wishlists = query
+    else:
+        await ctx.send("No game found with this AppID!")
+        return
+
     optional_premium_threshold = 4000
     mandatory_premium_threshold = 8000
 
-    if game:
-        # await ctx.send(f"{game['name']}"+f"{' | '+str(game['price_overview']['final_formatted']) if game.get('price_overview', False) else ''}"+f"\nWishlisted by **{wishlists}** members")
+    # if game:
 
-        if not game['price_overview']['currency'] == 'CAD':
-            await ctx.send(f"Unable to determine price score as the Steam API returned the incorrect currency. (Expected `CAD`, got `{game['price_overview']['currency']}`)\nPlease wait before trying again, or issue the command along with the pricing (in CAD for more accurate results):\n`game {AppID} 00.00` (Any format is accepted, but must include all digits including cents)")
-            return
-        
-        await ctx.send("Processing...")
+    if not game['price_overview']['currency'] == 'CAD':
+        await ctx.send(f"Unable to determine price score as the Steam API returned the incorrect currency. (Expected `CAD`, got `{game['price_overview']['currency']}`)\nPlease wait before trying again, or issue the command along with the pricing (in CAD for more accurate results):\n`game {AppID} 00.00` (Any format is accepted, but must include all digits including cents)")
+        return
+    
+    await ctx.send("Processing...")
 
-        if price:
-            price = ''.join(i for i in price if i.isdigit())
-            price_score = int(price)
-        else:
-            price_score = game['price_overview']['initial']
-        members_count = fetch_group_members_count()
-        wishlist_modifier = (float(wishlists)/float(members_count))
-
-        bundled = check_sg_bundled_list(AppID)
-
-        if not bundled:
-            bundled_modifier = 2.0
-        else:
-            bundled_modifier = 1.0
-
-        score = price_score * (bundled_modifier + wishlist_modifier)
-
-        if round(score) > mandatory_premium_threshold:
-            premium_eligibility = "✅ Mandatory"
-        elif round(score) > optional_premium_threshold:
-            premium_eligibility = "🆗 Optional"
-        else:
-            premium_eligibility = "❌ No"
-
-        embed = discord.Embed(title=game['name'], description=f"https://store.steampowered.com/app/{game['steam_appid']}", color=bot_color)
-
-        embed.add_field(
-            name="Price Score",
-            value=f"{price_score} (currently {game['price_overview']['discount_percent']}% off)" if game['price_overview'].get('discount_percent') else f"{price_score}",
-            inline=False
-        )
-        embed.add_field(
-            name="Bundled?",
-            value=f"{bundled} (+{bundled_modifier} to multiplier)",
-            inline=False
-        )
-        embed.add_field(
-            name="Wishlists Modifier",
-            value=f"+{round(wishlist_modifier, 2)} ({wishlists}/{members_count} members wishlisted)",
-            inline=False
-        )
-        embed.add_field(
-            name="Final Multiplier",
-            value=f"x{round((bundled_modifier + wishlist_modifier), 2)}",
-            inline=False
-        )
-        embed.add_field(
-            name="Value Score",
-            value=f"{round(score)}",
-            inline=False
-        )
-        embed.add_field(
-            name="Premium Giveaway Eligibility",
-            value=f"{premium_eligibility}",
-            inline=False
-        )
-        await ctx.send(embed=embed)
-
+    if price:
+        price = ''.join(i for i in price if i.isdigit())
+        price_score = int(price)
     else:
-        await ctx.send("No game found with this AppID!")
+        price_score = game['price_overview']['initial']
+    members_count = fetch_group_members_count()
+    wishlist_modifier = (float(wishlists)/float(members_count))
+
+    bundled = check_sg_bundled_list(AppID, game['name'])
+
+    if not bundled:
+        bundled_modifier = 2.0
+    else:
+        bundled_modifier = 1.0
+
+    score = price_score * (bundled_modifier + wishlist_modifier)
+
+    if round(score) > mandatory_premium_threshold:
+        premium_eligibility = "✅ Mandatory"
+    elif round(score) > optional_premium_threshold:
+        premium_eligibility = "🆗 Optional"
+    else:
+        premium_eligibility = "❌ No"
+
+    embed = discord.Embed(title=game['name'], description=f"https://store.steampowered.com/app/{game['steam_appid']}", color=bot_color)
+
+    embed.add_field(
+        name="Price Score",
+        value=f"{price_score} (currently {game['price_overview']['discount_percent']}% off)" if game['price_overview'].get('discount_percent') else f"{price_score}",
+        inline=False
+    )
+    embed.add_field(
+        name="Bundled?",
+        value=f"{bundled} (+{bundled_modifier} to multiplier)",
+        inline=False
+    )
+    embed.add_field(
+        name="Wishlists Modifier",
+        value=f"+{round(wishlist_modifier, 2)} ({wishlists}/{members_count} members wishlisted)",
+        inline=False
+    )
+    embed.add_field(
+        name="Final Multiplier",
+        value=f"x{round((bundled_modifier + wishlist_modifier), 2)}",
+        inline=False
+    )
+    embed.add_field(
+        name="Value Score",
+        value=f"{round(score)}",
+        inline=False
+    )
+    embed.add_field(
+        name="Premium Giveaway Eligibility",
+        value=f"{premium_eligibility}",
+        inline=False
+    )
+    await ctx.send(embed=embed)
+
+    # else:
+    #     await ctx.send("No game found with this AppID!")
 
 # HELP COMMANDS
 
