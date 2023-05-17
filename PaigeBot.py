@@ -7,8 +7,9 @@ import pandas as pd
 import time
 import re
 import python_weather
+import xmltodict
+import asyncio
 # import country_converter as coco
-import traceback
 
 from datetime import datetime
 from discord.ext import commands, tasks
@@ -47,6 +48,7 @@ last_checked_active_ga_ids = permanent_variables['last_checked_active_ga_ids']
 bot = commands.Bot(command_prefix=prefixes, help_command=None, intents=discord.Intents.all())
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
+STEAM_API_KEY = os.getenv("STEAM_API_KEY")
 
 # FUNCTIONS
 
@@ -197,6 +199,60 @@ def check_sg_bundled_list(AppID, game_title):
     else:
         return False
 
+def fetch_members_steamID64():
+    url = 'https://steamcommunity.com/groups/SGMonthlyMagazine/memberslistxml?xml=1'
+    r = requests.get(url)
+    members_steamID64_list = xmltodict.parse(r.content)
+    return members_steamID64_list['memberList']['members']['steamID64']
+
+# Highly demanding task with high rate of API calls - MUST BE RUN ONLY ONCE DAILY
+def fetch_members_owned_games():
+
+    print("Running fetch_members_owned_games()...")
+
+    members = fetch_members_steamID64()
+    private_profiles_count = 0
+    members_owned_games = {}
+
+    for i, SteamID64 in enumerate(members):
+        iteration_counter = f"{i}/{len(members)}"
+        print (iteration_counter, end="\r")
+
+        url = f'http://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/?key={STEAM_API_KEY}&steamid={SteamID64}&skip_unvetted_apps=false&format=json'
+        try:
+            r = requests.get(url)
+        except requests.exceptions.RequestException:
+            continue
+
+        owned_games = r.json()
+
+        if owned_games['response']:
+            members_owned_games[SteamID64] = owned_games['response']['games']
+        else:
+            private_profiles_count += 1
+
+    with open("members_owned_games.json", "w") as f:
+        json.dump(members_owned_games, f)
+    
+    print(f"Done! {private_profiles_count} profiles were private or otherwise inaccessible, and were not parsed.")
+
+def check_AppID_owners(AppID):
+    with open("members_owned_games.json", "r") as f:
+        members_owned_games = json.load(f)
+
+    owners_count = 0
+
+    for user in members_owned_games.values():
+        for app in user:
+            if app['appid'] == int(AppID):
+                print(f"{app['appid']} = {int(AppID)}. Counted +1")
+                owners_count += 1
+            else:
+                continue
+    
+    print(f"Done! {owners_count} members own this.")
+    return owners_count
+
 # BOT EVENTS
 
 @bot.event
@@ -209,6 +265,10 @@ async def on_ready():
         activity=discord.Activity(name="for prefix: p!", type=discord.ActivityType.watching))
     
     check_for_new_giveaways.start()
+
+# Made into manual command due to risk of it crashing PaigeBot.
+
+    # update_members_owned_games_file.start()
     
 @bot.event
 async def on_command_error(ctx, error):
@@ -503,6 +563,7 @@ async def weather(ctx, *location):
 async def game(ctx, AppID, price=None):
 
     query = fetch_sg_wishlists(AppID)
+
     if query:
         game, wishlists = query
     else:
@@ -525,7 +586,9 @@ async def game(ctx, AppID, price=None):
         price_score = int(price)
     else:
         price_score = game['price_overview']['initial']
+
     members_count = fetch_group_members_count()
+    game_owners = check_AppID_owners(AppID)
     wishlist_modifier = (float(wishlists)/float(members_count))
 
     bundled = check_sg_bundled_list(AppID, game['name'])
@@ -544,7 +607,7 @@ async def game(ctx, AppID, price=None):
     else:
         premium_eligibility = "❌ No"
 
-    embed = discord.Embed(title=game['name'], description=f"https://store.steampowered.com/app/{game['steam_appid']}", color=bot_color)
+    embed = discord.Embed(title=game['name'], description=f"https://store.steampowered.com/app/{game['steam_appid']}\nOwned by {game_owners}/{members_count} group members", color=bot_color)
 
     embed.add_field(
         name="Price Score",
@@ -641,6 +704,9 @@ async def help(ctx):
 
         ("checkusers `usernames`",
          "Verifies if a list of `usernames` (separated by spaces or newlines) matches a profile on Steamgifts."),
+
+        ("updatecache",
+         "Fetches a list of all owned games for each group member. As the command makes one API call per member, it is advised not to issue the command frequently.")
     ]
 
     public_commands = discord.Embed(title="Commands", description="The below commands are available to issue anywhere within the server, except where stated otherwise.", color=bot_color)
@@ -713,9 +779,27 @@ async def checkusers(ctx, *users):
 
     await msg.edit(content=f"Done! {len(results)}/{len(users)}")
 
+@bot.command()
+@commands.has_any_role("Staff", "Founders")
+async def updatecache(ctx):
+    await ctx.send("This function is very demanding and performs a high number of API requests. Are you sure you want to continue? [Y]")
+
+    def check(m):
+        return m.content.lower() == "y"
+
+    try:
+        await bot.wait_for("message", check=check, timeout=5.0)
+    except asyncio.TimeoutError:
+        await ctx.send("Command timed out. Operation cancelled.")
+
+    else:
+        await ctx.send("Processing...")
+        fetch_members_owned_games()
+        await ctx.send("Done!")
+
 # TASKS
 
-@tasks.loop(minutes=10)
+@tasks.loop(minutes=30)
 async def check_for_new_giveaways():
 
     if bot.user.id == 823385752486412290:
@@ -776,5 +860,11 @@ async def check_for_new_giveaways():
         print("ABORT: No new giveaways detected.")
 
     print("Done!")
+
+# Changed to a manual command due to the risk of crashing PaigeBot
+
+# @tasks.loop(hours=24)
+# async def update_members_owned_games_file():
+#     fetch_members_owned_games()
 
 bot.run(TOKEN)
