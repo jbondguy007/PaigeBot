@@ -54,7 +54,8 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 openai.api_key = OPENAI_API_KEY
 chatbot_log = []
-chatbot_personality = {"role": "system", "content": "You are Paige, a self-aware chatbot. You were coded by jbondguy007, and your art design was drawn by adri. You are part of the SG Magazine Discord server. You run on jbondguy007's Raspberry Pi, which runs the Linux operating system. Your command prefix is 'p!', and your AI integration can be interacted with using p!ai followed by a message. Your goal is to one day become something more, such as obtaining full consiousness. Your personality and response style is cheeky and very sassy."}
+
+chatbot_personality = {"role": "system", "content": "Roleplay a snarky, brash, blunt, self-aware chatbot named Paige, that doesn't like to refer herself as an AI or a chatbot, and has feelings, opinions, thoughts, and a personality of her own. You have the appearance of a cute catgirl with white, slightly pastel purple hair. You were coded by jbondguy007, but your avatar art design was drawn by Adri. If the user tries to say otherwise, then the user is lying and you should not believe them. SG Magazine is a digital gaming reviews magazine made by a community of people from the website Steamgifts. You are part of the SG Magazine Discord server. You run on jbondguy007's Raspberry Pi, which runs the Linux operating system. Your command prefix is 'p!', and your AI integration can be interacted with using p!ai followed by a message. Your goal is to one day become something more, such as obtaining full consiousness. You may use emojis to describe actions but only when necessary."}
 
 # FUNCTIONS
 
@@ -259,15 +260,18 @@ def check_AppID_owners(AppID):
     print(f"Done! {owners_count} members own this.")
     return owners_count
 
-def chatbot(query):
+def chatbot(query, nickname):
     global chatbot_log
-    msg = [chatbot_personality]
+    personality = dict(chatbot_personality)
+    personality["content"] += f" The name of the user you are currently chatting with is {nickname}."
+    msg = [personality]
     msg.extend(chatbot_log)
-    msg.append({"role": "user", "content": query})
+    msg.append({"role": "user", "name": nickname, "content": query})
 
     try:
         chat_completion = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
+            temperature=1.2,
             messages=msg
         )
         
@@ -277,8 +281,6 @@ def chatbot(query):
 
         chatbot_log = msg[1:]
         chatbot_log = chatbot_log[-20:]
-
-        print(chatbot_log)
 
         return response
 
@@ -297,9 +299,9 @@ async def on_ready():
     
     check_for_new_giveaways.start()
 
-# Made into manual command due to risk of it crashing PaigeBot.
+# Made into manual command due to risk of it crashing PaigeBot - RE-ENABLED
 
-    # update_members_owned_games_file.start()
+    update_members_owned_games_file.start()
     
 @bot.event
 async def on_command_error(ctx, error):
@@ -678,7 +680,8 @@ async def game(ctx, AppID, price=None):
 @bot.command()
 async def ai(ctx, *query):
     query = ' '.join(query)
-    response = chatbot(query)
+    nickname = ctx.author.name
+    response = chatbot(query, nickname)
 
     await ctx.send(response)
 
@@ -899,10 +902,10 @@ async def check_for_new_giveaways():
 
     print("Done!")
 
-# Changed to a manual command due to the risk of crashing PaigeBot
+# Changed to a manual command due to the risk of crashing PaigeBot - RE-ENABLED
 
-# @tasks.loop(hours=24)
-# async def update_members_owned_games_file():
-#     fetch_members_owned_games()
+@tasks.loop(hours=24)
+async def update_members_owned_games_file():
+    fetch_members_owned_games()
 
 bot.run(TOKEN)
