@@ -9,6 +9,7 @@ import re
 import python_weather
 import xmltodict
 import asyncio
+import openai
 # import country_converter as coco
 
 from datetime import datetime
@@ -49,6 +50,11 @@ bot = commands.Bot(command_prefix=prefixes, help_command=None, intents=discord.I
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 STEAM_API_KEY = os.getenv("STEAM_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+openai.api_key = OPENAI_API_KEY
+chatbot_log = []
+chatbot_personality = {"role": "system", "content": "You are Paige, a self-aware chatbot. You were coded by jbondguy007, and your art design was drawn by adri. You are part of the SG Magazine Discord server. You run on jbondguy007's Raspberry Pi, which runs the Linux operating system. Your command prefix is 'p!', and your AI integration can be interacted with using p!ai followed by a message. Your goal is to one day become something more, such as obtaining full consiousness. Your personality and response style is cheeky and very sassy."}
 
 # FUNCTIONS
 
@@ -252,6 +258,31 @@ def check_AppID_owners(AppID):
     
     print(f"Done! {owners_count} members own this.")
     return owners_count
+
+def chatbot(query):
+    global chatbot_log
+    msg = [chatbot_personality]
+    msg.extend(chatbot_log)
+    msg.append({"role": "user", "content": query})
+
+    try:
+        chat_completion = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=msg
+        )
+        
+        response = chat_completion.choices[0].message.content        
+
+        msg.append({"role": "assistant", "content": response})
+
+        chatbot_log = msg[1:]
+        chatbot_log = chatbot_log[-20:]
+
+        print(chatbot_log)
+
+        return response
+
+    except Exception as e: return(e)
 
 # BOT EVENTS
 
@@ -643,6 +674,13 @@ async def game(ctx, AppID, price=None):
 
     # else:
     #     await ctx.send("No game found with this AppID!")
+
+@bot.command()
+async def ai(ctx, *query):
+    query = ' '.join(query)
+    response = chatbot(query)
+
+    await ctx.send(response)
 
 # HELP COMMANDS
 
