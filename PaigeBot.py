@@ -262,9 +262,13 @@ def check_AppID_owners(AppID):
 
 def chatbot(query, nickname):
     global chatbot_log
+    print(nickname)
     nickname = re.sub('[^a-zA-Z0-9\n\.]', ' ', nickname)
+    print(nickname)
     nickname = nickname.split()
+    print(nickname)
     nickname = nickname[0]
+    print(nickname)
     personality = dict(chatbot_personality)
     personality["content"] += f" The name of the user you are currently chatting with is {nickname}."
     msg = [personality]
@@ -683,7 +687,7 @@ async def game(ctx, AppID, price=None):
 @bot.command()
 async def ai(ctx, *query):
     query = ' '.join(query)
-    nickname = ctx.author.nick
+    nickname = ctx.author.display_name
     response = chatbot(query, nickname)
 
     await ctx.send(response)
