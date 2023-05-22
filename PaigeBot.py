@@ -262,6 +262,9 @@ def check_AppID_owners(AppID):
 
 def chatbot(query, nickname):
     global chatbot_log
+    nickname = re.sub('[^a-zA-Z0-9\n\.]', ' ', nickname)
+    nickname = nickname.split()
+    nickname = nickname[0]
     personality = dict(chatbot_personality)
     personality["content"] += f" The name of the user you are currently chatting with is {nickname}."
     msg = [personality]
@@ -300,8 +303,8 @@ async def on_ready():
     check_for_new_giveaways.start()
 
 # Made into manual command due to risk of it crashing PaigeBot - RE-ENABLED
-
-    update_members_owned_games_file.start()
+    if not bot.user.id == 823385752486412290:
+        update_members_owned_games_file.start()
     
 @bot.event
 async def on_command_error(ctx, error):
@@ -680,7 +683,7 @@ async def game(ctx, AppID, price=None):
 @bot.command()
 async def ai(ctx, *query):
     query = ' '.join(query)
-    nickname = ctx.author.name
+    nickname = ctx.author.nick
     response = chatbot(query, nickname)
 
     await ctx.send(response)
