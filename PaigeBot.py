@@ -297,16 +297,12 @@ async def on_ready():
     print("Ready!")
     await bot.change_presence(status=discord.Status.online,
         activity=discord.Activity(name="for prefix: p!", type=discord.ActivityType.watching))
-    
-    # TODO Uncomment this before pushing change
-    check_for_new_giveaways.start()
 
     # Made into manual command due to risk of it crashing PaigeBot - RE-ENABLED
     if not bot.user.id == 823385752486412290:
         update_members_owned_games_file.start()
-
-    # Steam sales notifications
-    steam_sales_daily_reminder.start()
+        check_for_new_giveaways.start()
+        steam_sales_daily_reminder.start()
     
 @bot.event
 async def on_command_error(ctx, error):
@@ -620,7 +616,15 @@ async def weather(ctx, *location):
 @bot.command()
 async def game(ctx, AppID, price=None):
 
+    o = ":yellow_square:"
+    i = ":orange_square:"
+
+    # await ctx.send("Processing... [|....]")
+    msg = await ctx.send(f"Processing... {o}{o}{o}{o}{o}")
+
     query = fetch_sg_wishlists(AppID)
+
+    await msg.edit(content=f"Processing... {i}{o}{o}{o}{o}")
 
     if query:
         game, wishlists = query
@@ -636,8 +640,6 @@ async def game(ctx, AppID, price=None):
     if not game['price_overview']['currency'] == 'CAD':
         await ctx.send(f"Unable to determine price score as the Steam API returned the incorrect currency. (Expected `CAD`, got `{game['price_overview']['currency']}`)\nPlease wait before trying again, or issue the command along with the pricing (in CAD for more accurate results):\n`game {AppID} 00.00` (Any format is accepted, but must include all digits including cents)")
         return
-    
-    await ctx.send("Processing...")
 
     if price:
         price = ''.join(i for i in price if i.isdigit())
@@ -646,10 +648,18 @@ async def game(ctx, AppID, price=None):
         price_score = game['price_overview']['initial']
 
     members_count = fetch_group_members_count()
+
+    await msg.edit(content=f"Processing... {i}{i}{o}{o}{o}")
+
     game_owners = check_AppID_owners(AppID)
+
+    await msg.edit(content=f"Processing... {i}{i}{i}{o}{o}")
+
     wishlist_modifier = (float(wishlists)/float(members_count))
 
     bundled = check_sg_bundled_list(AppID, game['name'])
+
+    await msg.edit(content=f"Processing... {i}{i}{i}{i}{o}")
 
     if not bundled:
         bundled_modifier = 2.0
@@ -672,8 +682,10 @@ async def game(ctx, AppID, price=None):
     else:
         previously_given_away = "NO"
     
-    if not premium_eligibility == "❌ No":
+    if premium_eligibility != "❌ No" and previously_given_away == "NO":
         previously_given_away += " (Double-check Premium giveaways)"
+
+    await msg.edit(content=f"Processing... {i}{i}{i}{i}{i}")
 
     embed = discord.Embed(title=game['name'], description=f"https://store.steampowered.com/app/{game['steam_appid']}\nOwned by {game_owners}/{members_count} group members", color=bot_color)
 
@@ -714,6 +726,8 @@ async def game(ctx, AppID, price=None):
         inline=False
     )
     await ctx.send(embed=embed)
+
+    await msg.edit(content=f"Processing... Done!")
 
     # else:
     #     await ctx.send("No game found with this AppID!")
