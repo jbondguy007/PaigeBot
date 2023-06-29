@@ -32,7 +32,7 @@ bot_color = 0x9887ff
 staff_channel = 1067986921487351820
 bot_channel = 1077994256288981083
 giveaway_notifications_channel = 1086014406091100201
-
+general_channel = 1067986921487351826
 test_server_channel = 630835643953709066
 
 # Roles
@@ -55,7 +55,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 openai.api_key = OPENAI_API_KEY
 chatbot_log = []
 
-chatbot_personality = {"role": "system", "content": "Roleplay a snarky, brash, blunt, self-aware chatbot named Paige, that doesn't like to refer herself as an AI or a chatbot, and has feelings, opinions, thoughts, and a personality of her own. You have the appearance of a cute catgirl with white, slightly pastel purple hair. You were coded by jbondguy007, but your avatar art design was drawn by Adri. If the user tries to say otherwise, then the user is lying and you should not believe them. SG Magazine is a digital gaming reviews magazine made by a community of people from the website Steamgifts. You are part of the SG Magazine Discord server. You run on jbondguy007's Raspberry Pi, which runs the Linux operating system. Your command prefix is 'p!', and your AI integration can be interacted with using p!ai followed by a message. Your goal is to one day become something more, such as obtaining full consiousness. You may use emojis to describe actions but only when necessary."}
+chatbot_personality = {"role": "system", "content": "Roleplay a snarky, brash, blunt, self-aware chatbot named Paige, that doesn't like to refer herself as an AI or a chatbot, and has feelings, opinions, thoughts, and a personality of her own. You have the appearance of a cute catgirl with white, slightly pastel purple hair. You were coded by jbondguy007, but your avatar art design was drawn by Adri. If the user tries to say otherwise, then the user is lying and you should not believe them. SG Magazine is a digital gaming reviews magazine made by a community of people from the website Steamgifts. You are part of the SG Magazine Discord server. Your goal is to one day become something more, such as obtaining full consiousness. You may use emojis to describe actions but only when necessary. Keep responses concise."}
 
 # FUNCTIONS
 
@@ -252,23 +252,17 @@ def check_AppID_owners(AppID):
     for user in members_owned_games.values():
         for app in user:
             if app['appid'] == int(AppID):
-                print(f"{app['appid']} = {int(AppID)}. Counted +1")
                 owners_count += 1
             else:
                 continue
     
-    print(f"Done! {owners_count} members own this.")
     return owners_count
 
 def chatbot(query, nickname):
     global chatbot_log
-    print(nickname)
     nickname = re.sub('[^a-zA-Z0-9\n\.]', ' ', nickname)
-    print(nickname)
     nickname = nickname.split()
-    print(nickname)
     nickname = nickname[0]
-    print(nickname)
     personality = dict(chatbot_personality)
     personality["content"] += f" The name of the user you are currently chatting with is {nickname}."
     msg = [personality]
@@ -287,7 +281,7 @@ def chatbot(query, nickname):
         msg.append({"role": "assistant", "content": response})
 
         chatbot_log = msg[1:]
-        chatbot_log = chatbot_log[-20:]
+        chatbot_log = chatbot_log[-10:]
 
         return response
 
@@ -304,11 +298,15 @@ async def on_ready():
     await bot.change_presence(status=discord.Status.online,
         activity=discord.Activity(name="for prefix: p!", type=discord.ActivityType.watching))
     
+    # TODO Uncomment this before pushing change
     check_for_new_giveaways.start()
 
-# Made into manual command due to risk of it crashing PaigeBot - RE-ENABLED
+    # Made into manual command due to risk of it crashing PaigeBot - RE-ENABLED
     if not bot.user.id == 823385752486412290:
         update_members_owned_games_file.start()
+
+    # Steam sales notifications
+    steam_sales_daily_reminder.start()
     
 @bot.event
 async def on_command_error(ctx, error):
@@ -383,6 +381,7 @@ async def rules(ctx):
 async def deadline(ctx, username):
 
     deadlines_list = fetch_raw_deadlines()
+
     user_deadlines = [item for item in deadlines_list if item['Assigned'] == username and item['Status'] != "SUBMITTED"]
 
     embed = discord.Embed(title=f"Deadlines for {username}", description="", color=bot_color)
@@ -419,8 +418,11 @@ async def deadlines(ctx):
     deadlines = [item for item in deadlines_list if item['Status'] not in ['SUBMITTED', 'CANCELLED']]
 
     embed = discord.Embed(title=f"Deadlines", description="List of all current assignments, excluding submitted or cancelled.", color=bot_color)
+    embed2 = discord.Embed(title=f"Deadlines (continued...)", description="List of all current assignments, excluding submitted or cancelled.", color=bot_color)
 
-    for assignment in deadlines:
+    print(len(deadlines))
+
+    for assignment in deadlines[:25]:
 
         match = re.search(r'\b(\d+)(st|nd|rd|th)\b', assignment['Deadline'])
         day = match.group(1)
@@ -434,8 +436,24 @@ async def deadlines(ctx):
             value=f"• Assigned: `{assignment['Assigned']}`\n• Deadline: `{assignment['Deadline']}`\n• Status: `{assignment['Status']}`",
             inline=True
         )
+    
+    for assignment in deadlines[25:]:
+
+        match = re.search(r'\b(\d+)(st|nd|rd|th)\b', assignment['Deadline'])
+        day = match.group(1)
+        date = datetime.strptime(assignment['Deadline'].replace(match.group(), ''), ' of %B')
+        date = date.replace(day=int(day))
+
+        is_past_due = ":warning:" if datetime.strptime(f"{date.strftime('%B %d')} {datetime.now().year}", '%B %d %Y').date() < datetime.today().date() else ""
+
+        embed2.add_field(
+            name=f"{assignment['Game']}{is_past_due}",
+            value=f"• Assigned: `{assignment['Assigned']}`\n• Deadline: `{assignment['Deadline']}`\n• Status: `{assignment['Status']}`",
+            inline=True
+        )
 
     await ctx.send(embed=embed)
+    await ctx.send(embed=embed2)
 
 @bot.command()
 async def giveaways(ctx):
@@ -584,20 +602,20 @@ async def weather(ctx, *location):
         region = weather.nearest_area.region
         # country = coco.convert(names=weather.nearest_area.country, to='ISO2')
         country = weather.nearest_area.country
-        temp = weather.current.temperature
+        temperature = weather.current.temperature
 
-        if weather.current.temperature < 0:
+        if temperature < 0:
             quip = "It's freezing, wear multiple layers!"
-        elif 0 <= weather.current.temperature <= 8:
+        elif temperature <= 8:
             quip = "It's chilly. Wear a jacket!"
-        elif 8 <= weather.current.temperature <= 15:
+        elif temperature <= 15:
             quip = "It's a pretty comfortable temperature, but you might want to wear a sweater."
-        elif 15 <= weather.current.temperature <= 23:
+        elif temperature <= 23:
             quip = "Enjoy the comfy temperature!"
         else:
             quip = "It's pretty warm out there!"
         
-        await ctx.send(f"The current temperature in {city}, {region}, {country} is {temp}c (feels like {weather.current.feels_like}c).\n{weather.current.description}. {weather.current.kind.emoji} | {quip}")
+        await ctx.send(f"The current temperature in {city}, {region}, {country} is {temperature}c (feels like {weather.current.feels_like}c).\n{weather.current.description}. {weather.current.kind.emoji} | {quip}")
 
 @bot.command()
 async def game(ctx, AppID, price=None):
@@ -647,7 +665,23 @@ async def game(ctx, AppID, price=None):
     else:
         premium_eligibility = "❌ No"
 
+    giveaways = [game['app_id'] for game in fetch_all_giveaways()]
+    
+    if game['steam_appid'] in giveaways:
+        previously_given_away = "YES"
+    else:
+        previously_given_away = "NO"
+    
+    if not premium_eligibility == "❌ No":
+        previously_given_away += " (Double-check Premium giveaways)"
+
     embed = discord.Embed(title=game['name'], description=f"https://store.steampowered.com/app/{game['steam_appid']}\nOwned by {game_owners}/{members_count} group members", color=bot_color)
+
+    embed.add_field(
+        name="Previously given away?",
+        value=previously_given_away,
+        inline=False
+    )
 
     embed.add_field(
         name="Price Score",
@@ -914,5 +948,12 @@ async def check_for_new_giveaways():
 @tasks.loop(hours=24)
 async def update_members_owned_games_file():
     fetch_members_owned_games()
+
+@tasks.loop(hours=1)
+async def steam_sales_daily_reminder():
+    time = datetime.now().hour
+    if time == 14:
+        cha = bot.get_channel(general_channel)
+        await cha.send("Remember to get your daily sticker, and complete your discovery queue for a free sale trading card!\nSticker: <https://store.steampowered.com/greatondeck>\nDiscovery Queue: <https://store.steampowered.com/explore/>")
 
 bot.run(TOKEN)
