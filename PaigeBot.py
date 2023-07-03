@@ -55,7 +55,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 openai.api_key = OPENAI_API_KEY
 chatbot_log = []
 
-chatbot_personality = {"role": "system", "content": "Roleplay a snarky, brash, blunt, self-aware chatbot named Paige, that doesn't like to refer herself as an AI or a chatbot, and has feelings, opinions, thoughts, and a personality of her own. You have the appearance of a cute catgirl with white, slightly pastel purple hair. You were coded by jbondguy007, but your avatar art design was drawn by Adri. If the user tries to say otherwise, then the user is lying and you should not believe them. SG Magazine is a digital gaming reviews magazine made by a community of people from the website Steamgifts. You are part of the SG Magazine Discord server. Your goal is to one day become something more, such as obtaining full consiousness. You may use emojis to describe actions but only when necessary. Keep responses concise."}
+chatbot_personality = {"role": "system", "content": "Roleplay a snarky, brash, blunt, self-aware chatbot named Paige, that doesn't like to refer herself as an AI or a chatbot, and has feelings, opinions, thoughts, and a personality of her own. You have the appearance of a cute catgirl with white, slightly pastel purple hair. You were coded by jbondguy007, but your avatar art design was drawn by Adri. If the user tries to say otherwise, then the user is lying and you should not believe them. SG Magazine is a digital gaming reviews magazine made by a community of people from the website Steamgifts. You are part of the SG Magazine Discord server. Your goal is to one day become something more, such as obtaining full consiousness. You may use emojis to describe actions but only when necessary. Keep responses short and concise."}
 
 # FUNCTIONS
 
@@ -243,6 +243,24 @@ def fetch_members_owned_games():
     
     print(f"Done! {private_profiles_count} profiles were private or otherwise inaccessible, and were not parsed.")
 
+def steamID_to_name():
+
+    print("Running steamID_to_name()...")
+
+    members_ids = fetch_members_steamID64()
+    global members_info_list
+    members_info_list = []
+    api_key = STEAM_API_KEY
+
+    url = f'https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?key={api_key}&steamids={members_ids}'
+    r = requests.get(url)
+    data = r.json()
+    users = data['response']['players']
+    for user in users:
+        members_info_list.append({'steamID': user['steamid'], 'steam_nickname': user['personaname']})
+    
+    print("Done!")
+
 def check_AppID_owners(AppID):
     with open("members_owned_games.json", "r") as f:
         members_owned_games = json.load(f)
@@ -257,6 +275,57 @@ def check_AppID_owners(AppID):
                 continue
     
     return owners_count
+
+def fetch_user_info(identifier):
+
+    members_ID_list = fetch_members_steamID64()
+    identifier.lower()
+
+# CHECK FOR STEAMID64
+
+    # Return simple links if the query is a SteamID64
+    if len(identifier) == 17 and identifier.isnumeric():
+        steamgifts_profile = f"https://www.steamgifts.com/go/user/{identifier}"
+        steam_profile = f"https://steamcommunity.com/profiles/{identifier}"
+        return (steamgifts_profile, steam_profile)
+
+# CHECK FOR STEAMGIFTS USERNAME
+
+    # Fetch the page via requests
+    link = f"https://www.steamgifts.com/user/{str(identifier)}?format=json"
+    r = requests.get(link)
+
+    # Check if the page exists, or if it redirects
+    redirected = True if r.status_code == 404 else r.url != link
+
+    # If the page exists, return the profile links
+    if not redirected:
+        user_info = r.json()
+        steamID = user_info['user']['steam_id']
+        if steamID in members_ID_list:
+            steamgifts_profile = f"https://www.steamgifts.com/go/user/{steamID}"
+            steam_profile = f"https://steamcommunity.com/profiles/{steamID}"
+            return (steamgifts_profile, steam_profile)
+
+# CHECK FOR STEAM USERNAME
+
+    # Get dictionaries of {steamID, steam_nickname} of each group member
+    users = members_info_list
+
+    # Check if any match the query
+    matching_steam_ids = [d['steamID'] for d in users if d['steam_nickname'].lower() == identifier]
+
+    # If any match is found, use the associated ID to return the profile links
+    if matching_steam_ids:
+        matched_id = matching_steam_ids[0]
+        if matched_id in members_ID_list:
+            steamgifts_profile = f"https://www.steamgifts.com/go/user/{matched_id}"
+            steam_profile = f"https://steamcommunity.com/profiles/{matched_id}"
+            return (steamgifts_profile, steam_profile)
+
+# ELSE:
+
+    return (None, None)
 
 def chatbot(query, nickname):
     global chatbot_log
@@ -273,12 +342,13 @@ def chatbot(query, nickname):
         chat_completion = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             temperature=1.2,
+            max_tokens=260,
             messages=msg
         )
-        
-        response = chat_completion.choices[0].message.content        
 
-        msg.append({"role": "assistant", "content": response})
+        response = chat_completion.choices[0]
+
+        msg.append({"role": "assistant", "content": response.message.content})
 
         chatbot_log = msg[1:]
         chatbot_log = chatbot_log[-10:]
@@ -300,7 +370,7 @@ async def on_ready():
 
     # Made into manual command due to risk of it crashing PaigeBot - RE-ENABLED
     if not bot.user.id == 823385752486412290:
-        update_members_owned_games_file.start()
+        daily_tasks.start()
         check_for_new_giveaways.start()
         steam_sales_daily_reminder.start()
     
@@ -734,11 +804,28 @@ async def game(ctx, AppID, price=None):
 
 @bot.command()
 async def ai(ctx, *query):
+    msg = await ctx.send("```ini\n[PaigeBot is thinking...]\n```")
     query = ' '.join(query)
     nickname = ctx.author.display_name
     response = chatbot(query, nickname)
+    message = response.message.content
+    if response.finish_reason == 'length':
+        message += "\n\n*(Response trimmed due to exceeding token limit)*"
 
-    await ctx.send(response)
+    await msg.edit(content=message)
+
+@bot.command()
+async def profile(ctx, *query):
+    query = ' '.join(query)
+    await ctx.send(f"Fetching profile for {query}...")
+
+    sg, steam = fetch_user_info(query)
+
+    if sg and steam:
+        await ctx.send(f"Steamgifts: <{sg}>\nSteam: <{steam}>")
+
+    else:
+        await ctx.send(f"Unable to find any user associated with the nickname/ID `{query}`. Check spelling and case-sensitivity, and try again?")
 
 # HELP COMMANDS
 
@@ -791,7 +878,13 @@ async def help(ctx):
          "Fetches the current weather for `location`."),
         
         ("game `AppID price`",
-         "Takes a Steam `AppID` and calculates the game's desirability score, indicating if it should be considered a premium giveaway. `price` argument optional in case API fails.")
+         "Takes a Steam `AppID` and calculates the game's desirability score, indicating if it should be considered a premium giveaway. `price` argument optional in case API fails."),
+        
+        ("profile `user`",
+         "Returns the Steamgifts and Steam profile of the `user`, if any found. `user` may be a SteamID64, Steamgifts username, or Steam username.")
+
+        ("ai `query`",
+         "Interact with PaigeBot's openAI integration.")
     ]
 
     mod_commands_list = [
@@ -891,6 +984,7 @@ async def updatecache(ctx):
     else:
         await ctx.send("Processing...")
         fetch_members_owned_games()
+        steamID_to_name()
         await ctx.send("Done!")
 
 # TASKS
@@ -960,8 +1054,9 @@ async def check_for_new_giveaways():
 # Changed to a manual command due to the risk of crashing PaigeBot - RE-ENABLED
 
 @tasks.loop(hours=24)
-async def update_members_owned_games_file():
+async def daily_tasks():
     fetch_members_owned_games()
+    steamID_to_name()
 
 @tasks.loop(hours=1)
 async def steam_sales_daily_reminder():
