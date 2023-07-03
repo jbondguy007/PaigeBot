@@ -881,7 +881,7 @@ async def help(ctx):
          "Takes a Steam `AppID` and calculates the game's desirability score, indicating if it should be considered a premium giveaway. `price` argument optional in case API fails."),
         
         ("profile `user`",
-         "Returns the Steamgifts and Steam profile of the `user`, if any found. `user` may be a SteamID64, Steamgifts username, or Steam username.")
+         "Returns the Steamgifts and Steam profile of the `user`, if any found. `user` may be a SteamID64, Steamgifts username, or Steam username."),
 
         ("ai `query`",
          "Interact with PaigeBot's openAI integration.")
