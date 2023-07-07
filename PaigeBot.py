@@ -34,11 +34,14 @@ bot_channel = 1077994256288981083
 giveaway_notifications_channel = 1086014406091100201
 general_channel = 1067986921487351826
 test_server_channel = 630835643953709066
+test_giveaway_notif_channel = 1079238616049537034
 
 # Roles
 
 role_fullmember = 1067986921038549022
 role_reviewer = 1067986921021788269
+role_contributors = 1067986921021788268
+role_premiumreviewer = 1104817858162204752
 
 with open("permanent_variables.json", "r") as f:
     permanent_variables = json.load(f)
@@ -1006,6 +1009,43 @@ async def aipurge(ctx):
     chatbot_log = []
     await ctx.send("AI chatlog purged!")
 
+# CONTRIBUTOR COMMANDS
+
+def fetch_giveaway_info(url):
+    r = requests.get(url)
+    page = bs(r.content, "html.parser")
+    title = page.title.string
+    user = page.find("div", {"class": "featured__column featured__column--width-fill text-right"}).find("a").get_text().strip()
+    steam_link = page.find("div", {"class": "featured__heading"}).select_one('a[href*="store.steampowered.com"]')['href']
+    image = page.find("img")['src']
+    print(image)
+    return({
+        "title": title,
+        "user": user,
+        "steam_link": steam_link,
+        "image": image
+    })
+
+@bot.command()
+@commands.has_any_role("Full Member", "Contributor", "Staff")
+async def premiumga(ctx, url):
+    giveaway = fetch_giveaway_info(url)
+
+    embed = discord.Embed(title=giveaway['title'], url=giveaway['steam_link'], color=bot_color)
+    embed.add_field(
+        name=f"From {giveaway['user']}",
+        value=giveaway['steam_link'],
+        inline=False
+    )
+    embed.set_image(url=giveaway['image'])
+    embed.set_thumbnail(url='https://i.imgur.com/JPGGIkV.png')
+
+    channel = bot.get_channel(giveaway_notifications_channel)
+
+    await channel.send(f"<@&{role_premiumreviewer}> A new giveaway is live! <:paigehappy:1080230055311061152>")
+    await channel.send(embed=embed)
+    await ctx.send("Premium giveaway announced!")
+
 # TASKS
 
 @tasks.loop(minutes=30)
@@ -1048,12 +1088,14 @@ async def check_for_new_giveaways():
             # Add the giveaway to last_checked_active_ga_ids.
             last_checked_active_ga_ids.append( [ga['id'], ga['name']] )
             
-            embed = discord.Embed(title=f"{ga['name']}", description="", color=bot_color)
+            embed = discord.Embed(title=ga['name'], url=f"https://store.steampowered.com/app/{ga['app_id']}", color=bot_color)
             embed.add_field(
                 name=f"From {ga['creator']['username']}",
-                value=f"{ga['link'].rsplit('/', 1)[0]}/",
+                value=f"Giveaway: {ga['link'].rsplit('/', 1)[0]}/",
                 inline=False
             )
+            embed.set_image(url=f"https://cdn.akamai.steamstatic.com/steam/apps/{ga['app_id']}/header.jpg")
+            embed.set_thumbnail(url='https://i.imgur.com/eUOwCYj.png')
 
             print(f"SENDING: Sending {ga['name']} ({str(ga['id'])}) to channel...")
 
