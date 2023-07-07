@@ -1034,7 +1034,7 @@ async def premiumga(ctx, url):
     embed = discord.Embed(title=giveaway['title'], url=giveaway['steam_link'], color=bot_color)
     embed.add_field(
         name=f"From {giveaway['user']}",
-        value=giveaway['steam_link'],
+        value=f"Giveaway: https://discord.com/channels/{ctx.guild.id}/{ctx.channel.id}/{ctx.message.id}",
         inline=False
     )
     embed.set_image(url=giveaway['image'])
