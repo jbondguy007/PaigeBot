@@ -10,6 +10,7 @@ import python_weather
 import xmltodict
 import asyncio
 import openai
+import random
 # import country_converter as coco
 
 from datetime import datetime
@@ -21,7 +22,7 @@ from bs4 import BeautifulSoup as bs
 # BOT INFO
 
 botname = "Paige"
-prefixes = ("p!", "!paige ")
+prefixes = ("p!", "P!", "!paige ")
 bot_birthdate = "February 20, 2023"
 bot_platform = [platform.system(), platform.release(), platform.python_version()]
 
@@ -621,7 +622,7 @@ async def convert(ctx, amount, from_currency, to_currency):
         await ctx.send(f"{round(result, 2)} {to_currency.upper()}")
 
     else:
-        result = convert_currency(float(amount), from_currency, to_currency)
+        result = convert_currency(float(amount), from_currency.upper(), to_currency.upper())
         await ctx.send(f"{result:.2f} {to_currency.upper()}")
 
 @bot.command()
@@ -833,7 +834,7 @@ async def profile(ctx, *query):
 # HELP COMMANDS
 
 @bot.command()
-async def help(ctx):
+async def help(ctx, query=None):
 
     threads_list = list(steamgifts_threads)
     threads_list = ", ".join(threads_list)
@@ -841,8 +842,8 @@ async def help(ctx):
         ("test",
          "Simple test command. Check if the bot is alive!"),
 
-        ("help",
-         "Displays this message."),
+        ("help `query`",
+         "Displays the help message. If `query` is provided, displays help for the relevant command, if any."),
 
         ("info",
          f"Information about me, {botname}!"),
@@ -887,7 +888,10 @@ async def help(ctx):
          "Returns the Steamgifts and Steam profile of the `user`, if any found. `user` may be a SteamID64, Steamgifts username, or Steam username."),
 
         ("ai `query`",
-         "Interact with PaigeBot's openAI integration.")
+         "Interact with PaigeBot's openAI integration."),
+        
+        ("profile `query`",
+         "Attempts to fetch a user's profiles links by their name passed as the query.")
     ]
 
     mod_commands_list = [
@@ -898,8 +902,47 @@ async def help(ctx):
          "Verifies if a list of `usernames` (separated by spaces or newlines) matches a profile on Steamgifts."),
 
         ("updatecache",
-         "Fetches a list of all owned games for each group member. As the command makes one API call per member, it is advised not to issue the command frequently.")
+         "Fetches a list of all owned games for each group member. As the command makes one API call per member, it is advised not to issue the command frequently."),
+
+        ("aipersona `prompt`",
+         "Replaces PaigeBot's AI integration personality prompt with `query`. `query` must be a string in quotes, or the word `default` to reset personality to default."),
+
+        ("aipurge",
+         "Wipes PaigeBot's AI integration memory bank. Can be used to force the AI to get back on track if it gets stuck on a topic/personality.")
     ]
+
+    # Individual help by query.
+    if query:
+        returned = False
+
+        # Public commands:
+        for com in [x for x in commands_list if x[0].split()[0] == query.lower()]:
+            command = discord.Embed(title=f'Help: {com[0].split()[0]}', color=bot_color)
+            command.add_field(
+                name=f"{prefixes[0]}{com[0]}",
+                value=f"*{com[1]}*",
+                inline=False
+            )
+            await ctx.send(embed=command)
+            returned = True
+
+        # Moderator commands:
+        for com in [x for x in mod_commands_list if x[0].split()[0] == query.lower()]:
+            command = discord.Embed(title=f'Help: {com[0].split()[0]}', color=bot_color)
+            command.add_field(
+                name=f"{prefixes[0]}{com[0]}",
+                value=f"*Moderator command. {com[1]}*",
+                inline=False
+            )
+            await ctx.send(embed=command)
+            returned = True
+        
+        # If the query did not return any result:
+        if not returned:
+            await ctx.send(f"No command named `{query}` documented! Check spelling, or issue `{prefixes[0]}help` for complete help documentation.")
+
+         # Stop processing any further.
+        return
 
     public_commands = discord.Embed(title="Commands", description="The below commands are available to issue anywhere within the server, except where stated otherwise.", color=bot_color)
 
