@@ -13,7 +13,7 @@ import openai
 import random
 # import country_converter as coco
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from discord.ext import commands, tasks
 from discord import message
 from dotenv import load_dotenv
@@ -831,6 +831,165 @@ async def profile(ctx, *query):
     else:
         await ctx.send(f"Unable to find any user associated with the nickname/ID `{query}`. Check spelling and case-sensitivity, and try again?")
 
+def log_checkin(ctx):
+    '''
+    Gathers the user's info and the time of running
+    this command, and adds it to the json file.
+    '''
+    start = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    userid = ctx.author.id
+    username = ctx.author.name
+
+    # Prepare payload
+    output = {}
+    output = {'user': username, 'checkin': start}
+
+    # Load json data
+    with open("slots_checkin.json") as feedsjson:
+        feeds = json.load(feedsjson)
+    
+    feeds[str(userid)] = output
+
+    # Dump check-in data to the json file
+    with open("slots_checkin.json", "w") as f:
+        json.dump(feeds, f)
+
+def checkin_check(ctx):
+    '''
+    Handles checking in, including running
+    the log_checkin() command as needed.
+    '''
+    cooldown = timedelta(seconds=1) # Cooldown timer
+    end = datetime.now().replace(microsecond=0)
+    userid = ctx.author.id
+
+    # Load json data
+    with open("slots_checkin.json", "r") as f:
+        data = json.load(f)
+
+    # Fetches the last check-in time for the user, or None if they have never checked in
+    start = datetime.strptime(data[str(userid)]['checkin'], '%Y-%m-%d %H:%M:%S') if data.get(str(userid)) else None
+
+    # If they never checked in, process check-in
+    if not start:
+        log_checkin(ctx)
+    
+    # Otherwise, check if they pass the cooldown check
+    else:
+        dif = end-start
+
+        if dif < cooldown:
+            # If cooldown check fails, return False (and cooldown)
+            return(False, cooldown-dif)
+    
+    # If cooldown check passed, or the user has checked in for the first time, Return True
+    return(True, None)
+
+@bot.command()
+async def slots(ctx):
+
+    # Check if prize pool file is empty
+    if os.path.getsize('slots_prizes.json') <= 2:
+        await ctx.send("Unfortunately, the prize pool is currently empty. Try again another time!\nConsider donating a prize to the pool via the `slotskey` command.")
+        return
+
+    cherry = ':cherries:'
+    orange = ':tangerine:'
+    lemon = ':lemon:'
+
+    allowed, cooldown = checkin_check(ctx)
+
+    if not allowed:
+        await ctx.send(f"Please wait `{cooldown}` before trying again!")
+        return
+    
+    # Log the check-in time to the json file
+    log_checkin(ctx)
+
+    # Generate random emojis array
+    slots_result = []
+    for i in range(3):
+        slots_result.append(random.choice([cherry, orange, lemon]))
+    
+    await ctx.send("{}{}{}".format(*slots_result))
+    
+    # If not all emojis match
+    # if not all(element == slots_result[0] for element in slots_result):
+    #     await ctx.send("Better luck next time...")
+    #     return
+    
+    # If all emojis match
+    await ctx.send("## :tada: J A C K P O T ! :tada:")
+
+    # Load json data
+    with open("slots_prizes.json") as feedsjson:
+        feeds = json.load(feedsjson)
+    
+    # Pick a random prize, and send it to the user
+    prize = random.choice(list(feeds))
+    prize = feeds[prize]
+
+    await ctx.send(
+            f"<@{ctx.author.id}> has won... `{prize['title']}` key for `{prize['platform']}`! Please remember to thank <@{prize['user']}>!",
+            allowed_mentions=discord.AllowedMentions(users=False)
+        )
+    
+    await ctx.author.send(f"Congratulations on winning at PaigeSlots! Here is your key for `{prize['title']}` (activates on `{prize['platform']}`):\n`{prize['key']}`")
+
+    # Delete the prize from the pool
+    del feeds[prize['key']]
+
+    # Dump data back to json file
+    with open("slots_prizes.json", "w") as f:
+        json.dump(feeds, f)
+
+@bot.command()
+async def slotskey(ctx, *, args:commands.clean_content(fix_channel_mentions=False, use_nicknames=False)=None):
+
+    if not args:
+        await ctx.send(f"The `slotskey` command allows you to add a key drop to the prize pool of the `slots` command.\nPlease send me the command as `{prefixes[0]}slotskey activation-key-here, platform, Title Here` in a DM.")
+        return
+
+    if not ctx.channel.type == discord.ChannelType.private:
+        await ctx.author.send(f"Hello! I've noticed you attempted to use the `{prefixes[0]}slotskey` command publicly. The `{prefixes[0]}slotskey` command must be issued here, via DM! Please reply `{prefixes[0]}slotskey` for details. Thank you!")
+        await ctx.message.delete()
+        return
+
+    args = args.split(",", 2)
+
+    if len(args) < 3 or not all(v.strip() for v in args):
+        await ctx.author.send(f"One or more arguments are missing. Please write the command as `{prefixes[0]}slotskey activation-key-here, platform, Title Here`.")
+        return
+
+    key = args[0].strip()
+    platform = args[1].strip()
+    title = args[2].strip()
+
+    for replaceable in ["\r", "\n", "\t"]:
+        for item in [key, platform, title]:
+            item.replace(replaceable, " ")
+            item.replace("`", "")
+
+    # Prepare payload
+    output = {
+        "user": ctx.author.id,
+        "title": str(title),
+        "key": str(key),
+        "platform": str(platform)
+    }
+
+    # Load json data
+    with open("slots_prizes.json") as feedsjson:
+        feeds = json.load(feedsjson)
+    
+    feeds[key] = output
+
+    # Dump check-in data to the json file
+    with open("slots_prizes.json", "w") as f:
+        json.dump(feeds, f)
+
+    await ctx.send("Key added to prize pool! Thanks for your contribution!")
+
 # HELP COMMANDS
 
 @bot.command()
@@ -891,7 +1050,13 @@ async def help(ctx, query=None):
          "Interact with PaigeBot's openAI integration."),
         
         ("profile `query`",
-         "Attempts to fetch a user's profiles links by their name passed as the query.")
+         "Attempts to fetch a user's profiles links by their name passed as the query."),
+
+        ("slots",
+         "Play PaigeSlots! Get 3 matching fruits, and you can win a free game key! Play daily for a chance to win a prize."),
+
+        ("slotskey `activation-key-here, platform, Title Here`",
+         f"Contribute a game key to the slots command prize pool. Must be issued privately via DM to {botname}.")
     ]
 
     mod_commands_list = [
