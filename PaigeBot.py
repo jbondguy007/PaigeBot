@@ -859,7 +859,7 @@ def checkin_check(ctx):
     Handles checking in, including running
     the log_checkin() command as needed.
     '''
-    cooldown = timedelta(seconds=1) # Cooldown timer
+    cooldown = timedelta(seconds=10) # Cooldown timer
     end = datetime.now().replace(microsecond=0)
     userid = ctx.author.id
 
