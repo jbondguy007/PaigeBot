@@ -914,9 +914,9 @@ async def slots(ctx):
     await ctx.send("{}{}{}".format(*slots_result))
     
     # If not all emojis match
-    # if not all(element == slots_result[0] for element in slots_result):
-    #     await ctx.send("Better luck next time...")
-    #     return
+    if not all(element == slots_result[0] for element in slots_result):
+        await ctx.send("Better luck next time...")
+        return
     
     # If all emojis match
     await ctx.send("## :tada: J A C K P O T ! :tada:")
