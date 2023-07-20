@@ -902,6 +902,9 @@ async def slots(ctx):
     if not allowed:
         await ctx.send(f"Please wait `{cooldown}` before trying again!")
         return
+    
+    # Log the check-in time to the json file
+    log_checkin(ctx)
 
     # Generate random emojis array
     slots_result = []
@@ -917,9 +920,6 @@ async def slots(ctx):
     
     # If all emojis match
     await ctx.send("## :tada: J A C K P O T ! :tada:")
-
-    # Log the check-in time to the json file
-    log_checkin(ctx)
 
     # Load json data
     with open("slots_prizes.json") as feedsjson:
