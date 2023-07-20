@@ -859,7 +859,7 @@ def checkin_check(ctx):
     Handles checking in, including running
     the log_checkin() command as needed.
     '''
-    cooldown = timedelta(seconds=10) # Cooldown timer
+    cooldown = timedelta(hours=8) # Cooldown timer
     end = datetime.now().replace(microsecond=0)
     userid = ctx.author.id
 
@@ -902,9 +902,6 @@ async def slots(ctx):
     if not allowed:
         await ctx.send(f"Please wait `{cooldown}` before trying again!")
         return
-    
-    # Log the check-in time to the json file
-    log_checkin(ctx)
 
     # Generate random emojis array
     slots_result = []
@@ -920,6 +917,9 @@ async def slots(ctx):
     
     # If all emojis match
     await ctx.send("## :tada: J A C K P O T ! :tada:")
+
+    # Log the check-in time to the json file
+    log_checkin(ctx)
 
     # Load json data
     with open("slots_prizes.json") as feedsjson:
@@ -988,7 +988,36 @@ async def slotskey(ctx, *, args:commands.clean_content(fix_channel_mentions=Fals
     with open("slots_prizes.json", "w") as f:
         json.dump(feeds, f)
 
+    channel = bot.get_channel(bot_channel)
+
+    await channel.send(f"New prize has been added to the slots prizes pool! Check `{prefixes[0]}slotsprizes` for details!")
+
     await ctx.send("Key added to prize pool! Thanks for your contribution!")
+
+@bot.command()
+async def slotsprizes(ctx):
+    # Load json data
+    with open("slots_prizes.json") as feedsjson:
+        feeds = json.load(feedsjson)
+
+    embed = discord.Embed(title="Slots Prize Pool", description="The following games are available in the slots command prize pool.", color=bot_color)
+
+    if feeds:
+        for game in feeds.values():
+            username = ctx.guild.get_member(game['user'])
+            embed.add_field(
+                name=game['title'],
+                value=f"Contributor: {username.display_name}\nPlatform: {game['platform']}",
+                inline=False
+            )
+    else:
+        embed.add_field(
+            name="Unfortunately, the prize pool is currently empty. Try again another time!\nConsider donating a prize to the pool via the `slotskey` command.",
+            value="",
+            inline=False
+        )
+
+    await ctx.send(embed=embed)
 
 # HELP COMMANDS
 
@@ -1056,7 +1085,10 @@ async def help(ctx, query=None):
          "Play PaigeSlots! Get 3 matching fruits, and you can win a free game key! Play daily for a chance to win a prize."),
 
         ("slotskey `activation-key-here, platform, Title Here`",
-         f"Contribute a game key to the slots command prize pool. Must be issued privately via DM to {botname}.")
+         f"Contribute a game key to the slots command prize pool. Must be issued privately via DM to {botname}."),
+
+        ("slotsprizes",
+         "Lists the titles of available prizes in the slots command prize pool.")
     ]
 
     mod_commands_list = [
