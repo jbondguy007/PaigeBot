@@ -18,6 +18,7 @@ from discord.ext import commands, tasks
 from discord import message
 from dotenv import load_dotenv
 from bs4 import BeautifulSoup as bs
+from collections import Counter
 
 # BOT INFO
 
@@ -27,6 +28,8 @@ bot_birthdate = "February 20, 2023"
 bot_platform = [platform.system(), platform.release(), platform.python_version()]
 
 # VARIABLES
+
+slots_cooldown = timedelta(hours=6)
 
 bot_color = 0x9887ff
 
@@ -39,10 +42,16 @@ test_giveaway_notif_channel = 1079238616049537034
 
 # Roles
 
+role_founders = 1067986921038549023
+role_staff = 1068243517857607770
+role_officers = 1104752510788456559
 role_fullmember = 1067986921038549022
 role_reviewer = 1067986921021788269
 role_contributors = 1067986921021788268
 role_premiumreviewer = 1104817858162204752
+role_editors = 1068243558412341379
+role_readers = 1082686523088048138
+role_interviewers = 1132003617046528050
 
 with open("permanent_variables.json", "r") as f:
     permanent_variables = json.load(f)
@@ -859,7 +868,7 @@ def checkin_check(ctx):
     Handles checking in, including running
     the log_checkin() command as needed.
     '''
-    cooldown = timedelta(hours=8) # Cooldown timer
+    cooldown = slots_cooldown
     end = datetime.now().replace(microsecond=0)
     userid = ctx.author.id
 
@@ -990,7 +999,7 @@ async def slotskey(ctx, *, args:commands.clean_content(fix_channel_mentions=Fals
 
     channel = bot.get_channel(bot_channel)
 
-    await channel.send(f"New prize has been added to the slots prizes pool! Check `{prefixes[0]}slotsprizes` for details!")
+    await channel.send(f"New prize `{output['title']}` has been added to the slots prizes pool! Check `{prefixes[0]}slotsprizes` for details!")
 
     await ctx.send("Key added to prize pool! Thanks for your contribution!")
 
@@ -1018,6 +1027,159 @@ async def slotsprizes(ctx):
         )
 
     await ctx.send(embed=embed)
+
+def roll_dice(hand, r=None, k=None):
+    if not r and not k:
+        hand = [random.randrange(1, 5) for _ in range(5)]
+        print(hand)
+        return hand
+    elif r:
+        for d in r:
+            hand[d] = random.randrange(1, 5)
+        print(hand)
+        return hand
+    elif k:
+        new_hand = [random.randrange(1, 5) for _ in range(5)]
+        for d in k:
+            new_hand[d] = hand[d]
+        print(new_hand)
+        return new_hand
+
+def poker_hands(hand):
+
+    count = Counter(hand)
+
+    if all(die == hand[0] for die in hand):
+        return({
+            'highest': max(hand),
+            'score': sum(hand),
+            'rank': 8,
+            'name': 'Five of a Kind'
+            })
+    
+    elif max(count.values()) == 4:
+        return({
+            'highest': max(hand),
+            'score': sum(hand),
+            'rank': 7,
+            'name': 'Four of a Kind'
+            })
+    
+    elif any(value == 3 for value in count.values()) and any(value == 2 for value in count.values()):
+        return({
+            'highest': max(hand),
+            'score': sum(hand),
+            'rank': 6,
+            'name': 'Full House'
+            })
+    
+    elif all(hand[i] + 1 == hand[i + 1] for i in range(len(hand) - 1)):
+        return({
+            'highest': max(hand),
+            'score': sum(hand),
+            'rank': 5,
+            'name': 'Straight'
+            })
+    
+    elif any(value == 3 for value in count.values()):
+        return({
+            'highest': max(hand),
+            'score': sum(hand),
+            'rank': 4,
+            'name': 'Three of a Kind'
+            })
+    
+    elif len(count) == 3:
+        return({
+            'highest': max(hand),
+            'score': sum(hand),
+            'rank': 3,
+            'name': 'Two Pairs'
+            })
+    
+    elif any(value == 2 for value in count.values()):
+        return({
+            'highest': max(hand),
+            'score': sum(hand),
+            'rank': 2,
+            'name': 'One Pairs'
+            })
+    
+    else:
+        return({
+            'highest': max(hand),
+            'score': sum(hand),
+            'rank': 1,
+            'name': 'Bust'
+            })
+
+def dice_emojify(hand):
+    d = {
+        1: ':virgo:',
+        2: ':libra:',
+        3: ':capricorn:',
+        4: ':sagittarius:',
+        5: ':taurus:',
+        6: ':aquarius:'
+    }
+    return [d[i] for i in hand]
+
+# @bot.command()
+# async def poker(ctx, opponent : discord.Member):
+#     challenger = ctx.author
+#     timeout = 20.0
+#     challenger_hand = []
+#     opponent_hand = []
+
+    # await ctx.send(f"<@{opponent.id}> you have been challenged to a game of Dice Poker by {ctx.author.name}!\nDo you `!accept`?")
+
+    # def accept_challenge(m):
+    #     return m.content.lower() == "!accept" and m.author == opponent
+
+    # try:
+    #     await bot.wait_for("message", check=accept_challenge, timeout=timeout)
+    # except asyncio.TimeoutError:
+    #     await ctx.send("Timed out. Dice Poker game cancelled!")
+    #     return
+
+    # await ctx.send(f"Starting game between {ctx.author.name} and {opponent.name}...")
+
+    # await ctx.send(f"{opponent.name} rolls first as the challenged. `!r` to roll the dice!")
+
+    # def turn_check(m : discord.Message, user):
+    #     return m.content.lower() == "!r" and m.author == user
+
+    # # TURN 1
+
+    # # Opponent
+
+    # try:
+    #     await bot.wait_for("message", check=lambda m: turn_check(m, user=opponent), timeout=timeout)
+    # except asyncio.TimeoutError:
+    #     await ctx.send(f"Timed out. {opponent.name} forfeits!")
+    #     return
+    
+    # opponent_hand = roll_dice(opponent_hand)
+    # opponent_hand.sort()
+
+    # result = poker_hands(opponent_hand)
+
+    # embed = discord.Embed(title=opponent.name, description="", color=bot_color)
+    # embed.add_field(
+    #     name=result['name'],
+    #     value=' '.join(dice_emojify(opponent_hand))
+    # )
+
+    # await ctx.send(embed=embed)
+    # await ctx.send(' '.join(dice_emojify(opponent_hand)))
+
+    # Challenger
+
+    # try:
+    #     await bot.wait_for("message", check=turn_check(user=challenger), timeout=timeout)
+    # except asyncio.TimeoutError:
+    #     await ctx.send("Timed out. Dice Poker game cancelled!")
+    #     return
 
 # HELP COMMANDS
 
@@ -1082,7 +1244,7 @@ async def help(ctx, query=None):
          "Attempts to fetch a user's profiles links by their name passed as the query."),
 
         ("slots",
-         "Play PaigeSlots! Get 3 matching fruits, and you can win a free game key! Play daily for a chance to win a prize."),
+         f"Play PaigeSlots! Get 3 matching fruits, and you can win a free game key! Cooldown time is {slots_cooldown}."),
 
         ("slotskey `activation-key-here, platform, Title Here`",
          f"Contribute a game key to the slots command prize pool. Must be issued privately via DM to {botname}."),
@@ -1165,7 +1327,7 @@ async def help(ctx, query=None):
 # MODERATOR COMMANDS
 
 @bot.command()
-@commands.has_any_role("Staff", "Founders")
+@commands.has_any_role(role_staff)
 async def updatethread(ctx, thread, link):
 
     if thread in steamgifts_threads:
@@ -1181,7 +1343,7 @@ async def updatethread(ctx, thread, link):
         await ctx.send(f"Thread `{thread}` not found. Please use one of the following thread name arguments to set thread links:\n`{threads_list}`")
 
 @bot.command()
-@commands.has_any_role("Staff", "Founders")
+@commands.has_any_role(role_staff)
 async def checkusers(ctx, *users):
 
     results = []
@@ -1212,7 +1374,7 @@ async def checkusers(ctx, *users):
     await msg.edit(content=f"Done! {len(results)}/{len(users)}")
 
 @bot.command()
-@commands.has_any_role("Staff", "Founders")
+@commands.has_any_role(role_staff)
 async def updatecache(ctx):
     await ctx.send("This function is very demanding and performs a high number of API requests. Are you sure you want to continue? [Y]")
 
@@ -1231,7 +1393,7 @@ async def updatecache(ctx):
         await ctx.send("Done!")
 
 @bot.command()
-@commands.has_any_role("Staff", "Founders")
+@commands.has_any_role(role_staff)
 async def aipersona(ctx, *query):
     global chatbot_personality
     query = ' '.join(query)
@@ -1243,7 +1405,7 @@ async def aipersona(ctx, *query):
         await ctx.send(f"New persona registered!\n`\"{chatbot_personality['content']}\"`")
 
 @bot.command()
-@commands.has_any_role("Staff", "Founders")
+@commands.has_any_role(role_staff)
 async def aipurge(ctx):
     global chatbot_log
     chatbot_log = []
@@ -1267,7 +1429,7 @@ def fetch_giveaway_info(url):
     })
 
 @bot.command()
-@commands.has_any_role("Full Member", "Contributor", "Staff")
+@commands.has_any_role(role_fullmember, role_contributors, role_staff)
 async def premiumga(ctx, url):
     giveaway = fetch_giveaway_info(url)
 
@@ -1364,6 +1526,6 @@ async def steam_sales_daily_reminder():
     time = datetime.now().hour
     if time == 14:
         cha = bot.get_channel(general_channel)
-        await cha.send("Remember to get your daily sticker, and complete your discovery queue for a free sale trading card!\nSticker: <https://store.steampowered.com/greatondeck>\nDiscovery Queue: <https://store.steampowered.com/explore/>")
+        await cha.send("Remember to get your daily sticker: <https://store.steampowered.com/category/stealth>")
 
 bot.run(TOKEN)
