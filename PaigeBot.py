@@ -1031,18 +1031,15 @@ async def slotsprizes(ctx):
 def roll_dice(hand, r=None, k=None):
     if not r and not k:
         hand = [random.randrange(1, 5) for _ in range(5)]
-        print(hand)
         return hand
     elif r:
         for d in r:
-            hand[d] = random.randrange(1, 5)
-        print(hand)
+            hand[int(d)-1] = random.randrange(1, 5)
         return hand
     elif k:
         new_hand = [random.randrange(1, 5) for _ in range(5)]
         for d in k:
-            new_hand[d] = hand[d]
-        print(new_hand)
+            new_hand[int(d)-1] = hand[int(d)-1]
         return new_hand
 
 def poker_hands(hand):
@@ -1102,7 +1099,7 @@ def poker_hands(hand):
             'highest': max(hand),
             'score': sum(hand),
             'rank': 2,
-            'name': 'One Pairs'
+            'name': 'One Pair'
             })
     
     else:
@@ -1114,72 +1111,217 @@ def poker_hands(hand):
             })
 
 def dice_emojify(hand):
+    # STANDARD EMOTES
+    # d = {
+    #     1: ':virgo:',
+    #     2: ':libra:',
+    #     3: ':capricorn:',
+    #     4: ':sagittarius:',
+    #     5: ':taurus:',
+    #     6: ':aquarius:'
+    # }
+
+    # SGM SERVER EMOTES
     d = {
-        1: ':virgo:',
-        2: ':libra:',
-        3: ':capricorn:',
-        4: ':sagittarius:',
-        5: ':taurus:',
-        6: ':aquarius:'
+        1: '<:d1:1133778442651975781>',
+        2: '<:d2:1133778445978054756>',
+        3: '<:d3:1133778447953576006>',
+        4: '<:d4:1133778450080084058>',
+        5: '<:d5:1133778451334176799>',
+        6: '<:d6:1133778453842374848>'
     }
+
+    # TEST SERVER EMOTES
+    # d = {
+    #     1: '<:d1:1133651636879884358>',
+    #     2: '<:d2:1133651638616342599>',
+    #     3: '<:d3:1133651640537337886>',
+    #     4: '<:d4:1133651642030497877>',
+    #     5: '<:d5:1133651644689686539>',
+    #     6: '<:d6:1133651646195441724>'
+    # }
     return [d[i] for i in hand]
 
-# @bot.command()
-# async def poker(ctx, opponent : discord.Member):
-#     challenger = ctx.author
-#     timeout = 20.0
-#     challenger_hand = []
-#     opponent_hand = []
+roll_or_keep = 'roll'
 
-    # await ctx.send(f"<@{opponent.id}> you have been challenged to a game of Dice Poker by {ctx.author.name}!\nDo you `!accept`?")
+@bot.command()
+async def poker(ctx, opponent : discord.Member):
+    challenger = ctx.author
+    timeout = 60.0
+    challenger_hand = []
+    opponent_hand = []
 
-    # def accept_challenge(m):
-    #     return m.content.lower() == "!accept" and m.author == opponent
+    await ctx.send(f"<@{opponent.id}> you have been challenged to a game of Dice Poker by {ctx.author.name}!\nDo you `!accept`?")
 
-    # try:
-    #     await bot.wait_for("message", check=accept_challenge, timeout=timeout)
-    # except asyncio.TimeoutError:
-    #     await ctx.send("Timed out. Dice Poker game cancelled!")
-    #     return
+    def accept_challenge(m):
+        return m.content.lower() == "!accept" and m.author == opponent
 
-    # await ctx.send(f"Starting game between {ctx.author.name} and {opponent.name}...")
+    try:
+        await bot.wait_for("message", check=accept_challenge, timeout=timeout)
+    except asyncio.TimeoutError:
+        await ctx.send("Timed out. Dice Poker game cancelled!")
+        return
 
-    # await ctx.send(f"{opponent.name} rolls first as the challenged. `!r` to roll the dice!")
+    await ctx.send(f"Starting game between {ctx.author.name} and {opponent.name}...")
 
-    # def turn_check(m : discord.Message, user):
-    #     return m.content.lower() == "!r" and m.author == user
+    turns = 1
+    current_player = opponent
+    hand = opponent_hand
+    args = []
+    blue = 0x0000ff
+    red = 0xff0000
+    embed_color = blue
 
-    # # TURN 1
+    while turns <= 4:
 
-    # # Opponent
+        if turns <= 2:
 
-    # try:
-    #     await bot.wait_for("message", check=lambda m: turn_check(m, user=opponent), timeout=timeout)
-    # except asyncio.TimeoutError:
-    #     await ctx.send(f"Timed out. {opponent.name} forfeits!")
-    #     return
-    
-    # opponent_hand = roll_dice(opponent_hand)
-    # opponent_hand.sort()
+            if turns == 1:
+                await ctx.send(f"{current_player.name} rolls first as the challenged. `!r` to roll the dice!")
+            else:
+                await ctx.send(f"{current_player.name}'s turn. `!r` to roll the dice!")
 
-    # result = poker_hands(opponent_hand)
+            def turn_check(m : discord.Message, user):
+                return m.content.lower() == '!r' and m.author == user
 
-    # embed = discord.Embed(title=opponent.name, description="", color=bot_color)
-    # embed.add_field(
-    #     name=result['name'],
-    #     value=' '.join(dice_emojify(opponent_hand))
-    # )
+            try:
+                await bot.wait_for('message', check=lambda m: turn_check(m, user=current_player), timeout=timeout)
+            except asyncio.TimeoutError:
+                await ctx.send(f"Timed out. {current_player.name} forfeits!")
+                return
+        
+        else:
 
-    # await ctx.send(embed=embed)
-    # await ctx.send(' '.join(dice_emojify(opponent_hand)))
+            await ctx.send(f"{current_player.name}'s turn. `!r` to roll the desired dice, or `!k` to keep them!\n> Current hand: **{poker_hands(hand)['name']}**")
+            await ctx.send(' '.join(dice_emojify(hand)))
 
-    # Challenger
+            def turn_check(m : discord.Message, user):
+                global roll_or_keep
+                args = m.content.split()
 
-    # try:
-    #     await bot.wait_for("message", check=turn_check(user=challenger), timeout=timeout)
-    # except asyncio.TimeoutError:
-    #     await ctx.send("Timed out. Dice Poker game cancelled!")
-    #     return
+                if not m.author == user:
+                    return False
+
+                if args[0] == '!r':
+                        if len(args) > 1:
+                            roll_or_keep = 'roll'
+                        else:
+                            roll_or_keep = 'roll all'
+                        return True
+
+                if args[0] == '!k':
+                    if len(args) > 1:
+                            roll_or_keep = 'keep'
+                    else:
+                        roll_or_keep = 'keep all'
+                    return True
+
+            try:
+                message = await bot.wait_for('message', check=lambda m: turn_check(m, user=current_player), timeout=timeout)
+                args = message.content.split()
+            except asyncio.TimeoutError:
+                await ctx.send(f"Timed out. {current_player.name} forfeits!")
+                return
+
+        if roll_or_keep == 'roll':
+            hand = roll_dice(hand, r=args[1:])
+        elif roll_or_keep == 'keep':
+            hand = roll_dice(hand, k=args[1:])
+        elif roll_or_keep == 'roll all':
+            hand = roll_dice(hand)
+        else:
+            pass
+
+        hand.sort()
+
+        result = poker_hands(hand)
+
+        embed = discord.Embed(title=current_player.name, description="", color=embed_color)
+        embed.add_field(
+            name=result['name'],
+            value=' '.join(dice_emojify(hand))
+        )
+
+        await ctx.send(embed=embed)
+        await ctx.send("--------------------")
+
+        if current_player == opponent:
+            current_player = challenger
+            opponent_hand = hand
+            hand = challenger_hand
+            embed_color = red
+        else:
+            current_player = opponent
+            challenger_hand = hand
+            hand = opponent_hand
+            embed_color = blue
+
+        turns += 1
+
+    opponent_hand = poker_hands(opponent_hand)
+    challenger_hand = poker_hands(challenger_hand)
+
+    if opponent_hand['rank'] > challenger_hand['rank']:
+        await ctx.send(f"{opponent.name} wins with a {opponent_hand['name']} over {challenger.name}'s {challenger_hand['name']}!")
+
+    elif opponent_hand['rank'] < challenger_hand['rank']:
+        await ctx.send(f"{challenger.name} wins with a {challenger_hand['name']} over {opponent.name}'s {opponent_hand['name']}!")
+
+    elif opponent_hand['rank'] == challenger_hand['rank']:
+
+        if opponent_hand['rank'] > 1:
+
+            if opponent_hand['score'] > challenger_hand['score']:
+                await ctx.send(f"{opponent.name} wins with a {opponent_hand['name']} of higher value!")
+            elif opponent_hand['score'] < challenger_hand['score']:
+                await ctx.send(f"{challenger.name} wins with a {challenger_hand['name']} of higher value!")
+            return
+
+        if opponent_hand['score'] > challenger_hand['score']:
+            player = opponent
+        elif opponent_hand['score'] < challenger_hand['score']:
+            player = challenger
+        else:
+            await ctx.send(f"Perfect draw!")
+            return
+
+        await ctx.send(f"{player} wins with High Values!")
+
+@bot.command()
+async def pokerguide(ctx):
+    embed = discord.Embed(title="Dice Poker Guide", description="`poker` command guide", color=bot_color)
+    embed.add_field(
+        name="Basics",
+        value="Poker Dice is a simple form of Poker. Each player roll 5 dice each, with the goal of getting the best hand possible. Each player can roll once, and then choose to reroll or keep any dice once. After which, a winner is determined by the rank of the hand.",
+        inline=False
+    )
+    embed.add_field(
+        name="Hands",
+        value="""The possible hands are as follow, ranking best to worse:
+        Five of a Kind (**AAAAA**)
+        Four of a Kind (**AAAA**B)
+        Full House (**AABBB**)
+        Straight (**ABCDEF**)
+        Three of a Kind (**AAA**BC)
+        Two Pairs (**AABB**C)
+        One Pair (**AA**BCD)
+        Bust (No hand)
+        """,
+        inline=False
+    )
+    embed.add_field(
+        name="Commands",
+        value=f"""`!r` - Roll all 5 dice.
+        `!r 1 2 4` - Reroll the 1st, 2nd, and 4th dice.
+        `!k` - Keeps all 5 dice.
+        `!k 3 5` - Keeps 3rd and 5th dice, reroll everything else.
+        `{prefixes[0]}poker @user` - Challenges `@user` to a game of Dice Poker.
+        `!accept` - Accept a Poker Dice challenge.
+        """,
+        inline=False
+    )
+
+    await ctx.send(embed=embed)
 
 # HELP COMMANDS
 
@@ -1250,7 +1392,10 @@ async def help(ctx, query=None):
          f"Contribute a game key to the slots command prize pool. Must be issued privately via DM to {botname}."),
 
         ("slotsprizes",
-         "Lists the titles of available prizes in the slots command prize pool.")
+         "Lists the titles of available prizes in the slots command prize pool."),
+
+        ("poker `@user`",
+         f"Challenges `@user` to a game of Dice Poker. See `pokerguide` (`{prefixes[0]}pokerguide`) for more.")
     ]
 
     mod_commands_list = [
