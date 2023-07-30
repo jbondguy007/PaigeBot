@@ -1150,6 +1150,15 @@ async def poker(ctx, opponent : discord.Member):
     timeout = 60.0
     challenger_hand = []
     opponent_hand = []
+    global roll_or_keep
+
+    if opponent == challenger:
+        await ctx.send("At this time, Dice Poker does not allow playing against yourself. Try challenging a friend (who doesn't mind getting pinged)!")
+        return
+    
+    if opponent == bot:
+        await ctx.send(f"At this time, {botname} has not yet learned to play Dice Poker. Try challenging a friend (who doesn't mind getting pinged)!")
+        return
 
     await ctx.send(f"<@{opponent.id}> you have been challenged to a game of Dice Poker by {ctx.author.name}!\nDo you `!accept`?")
 
@@ -1171,6 +1180,7 @@ async def poker(ctx, opponent : discord.Member):
     blue = 0x0000ff
     red = 0xff0000
     embed_color = blue
+    roll_or_keep = 'roll'
 
     while turns <= 4:
 
@@ -1181,11 +1191,11 @@ async def poker(ctx, opponent : discord.Member):
             else:
                 await ctx.send(f"{current_player.name}'s turn. `!r` to roll the dice!")
 
-            def turn_check(m : discord.Message, user):
+            def first_roll_check(m : discord.Message, user):
                 return m.content.lower() == '!r' and m.author == user
 
             try:
-                await bot.wait_for('message', check=lambda m: turn_check(m, user=current_player), timeout=timeout)
+                await bot.wait_for('message', check=lambda m: first_roll_check(m, user=current_player), timeout=timeout)
             except asyncio.TimeoutError:
                 await ctx.send(f"Timed out. {current_player.name} forfeits!")
                 return
