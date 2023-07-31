@@ -385,7 +385,7 @@ async def on_ready():
     if not bot.user.id == 823385752486412290:
         daily_tasks.start()
         check_for_new_giveaways.start()
-        steam_sales_daily_reminder.start()
+        # steam_sales_daily_reminder.start()
     
 @bot.event
 async def on_command_error(ctx, error):
@@ -499,7 +499,7 @@ async def deadlines(ctx):
     embed = discord.Embed(title=f"Deadlines", description="List of all current assignments, excluding submitted or cancelled.", color=bot_color)
     embed2 = discord.Embed(title=f"Deadlines (continued...)", description="List of all current assignments, excluding submitted or cancelled.", color=bot_color)
 
-    print(len(deadlines))
+    # print(len(deadlines))
 
     for assignment in deadlines[:25]:
 
@@ -702,7 +702,6 @@ async def game(ctx, AppID, price=None):
     o = ":yellow_square:"
     i = ":orange_square:"
 
-    # await ctx.send("Processing... [|....]")
     msg = await ctx.send(f"Processing... {o}{o}{o}{o}{o}")
 
     query = fetch_sg_wishlists(AppID)
@@ -811,9 +810,6 @@ async def game(ctx, AppID, price=None):
     await ctx.send(embed=embed)
 
     await msg.edit(content=f"Processing... Done!")
-
-    # else:
-    #     await ctx.send("No game found with this AppID!")
 
 @bot.command()
 async def ai(ctx, *query):
@@ -1575,7 +1571,6 @@ def fetch_giveaway_info(url):
     user = page.find("div", {"class": "featured__column featured__column--width-fill text-right"}).find("a").get_text().strip()
     steam_link = page.find("div", {"class": "featured__heading"}).select_one('a[href*="store.steampowered.com"]')['href']
     image = page.find("img")['src']
-    print(image)
     return({
         "title": title,
         "user": user,
