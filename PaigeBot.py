@@ -72,6 +72,79 @@ chatbot_personality = {"role": "system", "content": "Roleplay a snarky, brash, b
 
 # FUNCTIONS
 
+class Buttons(discord.ui.View):
+    def __init__(self, prize, feeds, ctx, message=None, *, timeout=120):
+        super().__init__(timeout=timeout)
+        self.prize = prize
+        self.feeds = feeds
+        self.ctx = ctx.author
+        self.outer_ctx = ctx
+        self.message = message
+        self.button_pressed = False  # Flag to track if a button was pressed
+
+    async def on_timeout(self):
+        if not self.button_pressed:  # Only proceed if no button was pressed
+            for child in self.children:
+                child.disabled = True
+            await self.message.edit(view=self)
+            await self.ctx.send("Timed out! Revealing key.")
+            await self.ctx.send(self.prize['key'])
+            self.button_pressed = True
+            self.timeout_task.cancel()
+
+    @discord.ui.button(label="Reveal", style=discord.ButtonStyle.green, custom_id="reveal")
+    async def reveal(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.button_pressed = True  # Set the flag to True to indicate button press
+        self.timeout_task.cancel()  # If the timeout task exists, cancel it
+
+        button.disabled = True
+        for child in self.children:
+            child.disabled = True
+        await interaction.response.edit_message(view=self)
+        await interaction.followup.send(self.prize['key'])
+
+    @discord.ui.button(label="Redistribute", style=discord.ButtonStyle.red, custom_id="redistribute")
+    async def redist(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.button_pressed = True  # Set the flag to True to indicate button press
+        self.timeout_task.cancel()  # If the timeout task exists, cancel it
+
+        button.disabled = True
+        for child in self.children:
+            child.disabled = True
+        await interaction.response.edit_message(view=self)
+        self.redist_prize()
+        await interaction.followup.send("Key has been redistributed to the prize pool!")
+        await self.outer_ctx.send(
+            f"<@{self.outer_ctx.author.id}> has rejected the prize. `{self.prize['title']}` key for `{self.prize['platform']}` has been redistributed to the prize pool!",
+            allowed_mentions=discord.AllowedMentions(users=False)
+        )
+
+    @tasks.loop(seconds=1)  # Check every 1 second
+    async def timeout_task(self):
+        if self._timeout <= 0:  # Timeout has reached
+            self.timeout_task.stop()
+            await self.on_timeout()
+        else:
+            self._timeout -= 1
+
+    def start_timeout(self):
+        self._timeout = self.timeout  # Initialize the timeout value
+        self.timeout_task.start()  # Start the timeout loop
+
+    def redist_prize(self):
+        # Re-add key to the pool
+        self.feeds[self.prize['key']] = self.prize
+        # Dump data back to json file
+        with open("slots_prizes.json", "w") as f:
+            json.dump(self.feeds, f)
+
+def remove_slot_prize(prize, feeds):
+    # Delete the prize from the pool
+    del feeds[prize['key']]
+    # Dump data back to json file
+    with open("slots_prizes.json", "w") as f:
+        json.dump(feeds, f)
+
 def is_guild_owner():
     def predicate(ctx):
         return ctx.guild is not None and ctx.guild.owner_id == ctx.author.id
@@ -385,7 +458,7 @@ async def on_ready():
     if not bot.user.id == 823385752486412290:
         daily_tasks.start()
         check_for_new_giveaways.start()
-        # steam_sales_daily_reminder.start()
+        steam_sales_daily_reminder.start()
     
 @bot.event
 async def on_command_error(ctx, error):
@@ -934,19 +1007,18 @@ async def slots(ctx):
     prize = random.choice(list(feeds))
     prize = feeds[prize]
 
+    # Remove the key from the prize pool
+    remove_slot_prize(prize, feeds)
+
     await ctx.send(
             f"<@{ctx.author.id}> has won... `{prize['title']}` key for `{prize['platform']}`! Please remember to thank <@{prize['user']}>!",
             allowed_mentions=discord.AllowedMentions(users=False)
         )
     
-    await ctx.author.send(f"Congratulations on winning at PaigeSlots! Here is your key for `{prize['title']}` (activates on `{prize['platform']}`):\n`{prize['key']}`")
-
-    # Delete the prize from the pool
-    del feeds[prize['key']]
-
-    # Dump data back to json file
-    with open("slots_prizes.json", "w") as f:
-        json.dump(feeds, f)
+    await ctx.author.send(f"Congratulations on winning at PaigeSlots! You've won a key for `{prize['title']}` (activates on `{prize['platform']}`)")
+    view=Buttons(prize, feeds, ctx=ctx)
+    view.start_timeout()
+    view.message = await ctx.author.send(f"Would you like to reveal the key for {prize['title']}, or redistribute it to the prize pool? (2 minutes until automatically revealed)",view=view)
 
 @bot.command()
 async def slotskey(ctx, *, args:commands.clean_content(fix_channel_mentions=False, use_nicknames=False)=None):
@@ -1267,22 +1339,29 @@ async def poker(ctx, opponent : discord.Member):
     opponent_hand = poker_hands(opponent_hand)
     challenger_hand = poker_hands(challenger_hand)
 
+    # If opponents hand rank is greater
     if opponent_hand['rank'] > challenger_hand['rank']:
         await ctx.send(f"{opponent.name} wins with a {opponent_hand['name']} over {challenger.name}'s {challenger_hand['name']}!")
 
+    # Elif challenger hand rank is greater
     elif opponent_hand['rank'] < challenger_hand['rank']:
         await ctx.send(f"{challenger.name} wins with a {challenger_hand['name']} over {opponent.name}'s {opponent_hand['name']}!")
 
+    # Elif both hand ranks are the same
     elif opponent_hand['rank'] == challenger_hand['rank']:
 
+        # If the hand is not BUST
         if opponent_hand['rank'] > 1:
 
+            # Determine winning hand by score
             if opponent_hand['score'] > challenger_hand['score']:
                 await ctx.send(f"{opponent.name} wins with a {opponent_hand['name']} of higher value!")
+                return
             elif opponent_hand['score'] < challenger_hand['score']:
                 await ctx.send(f"{challenger.name} wins with a {challenger_hand['name']} of higher value!")
-            return
+                return
 
+        # Fallthrough (BUST or HIGH VALUES)
         if opponent_hand['score'] > challenger_hand['score']:
             player = opponent
         elif opponent_hand['score'] < challenger_hand['score']:
@@ -1676,6 +1755,6 @@ async def steam_sales_daily_reminder():
     time = datetime.now().hour
     if time == 14:
         cha = bot.get_channel(general_channel)
-        await cha.send("Remember to get your daily sticker: <https://store.steampowered.com/category/stealth>")
+        await cha.send("Remember to get your daily animated avatar: <https://store.steampowered.com/category/visual_novel>")
 
 bot.run(TOKEN)
