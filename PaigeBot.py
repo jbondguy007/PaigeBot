@@ -475,14 +475,16 @@ async def on_message(message):
     
     print(f"{message.created_at} | #{message.channel} | @{message.author} | {message.content}\n")
 
-#    if random.random() < 0.001:
-#        # Append a unique query parameter to the URL to prevent caching
-#        url = f'https://cataas.com/cat?{random.random()}'
-#        embed = discord.Embed(title="Easter Egg", description="There is roughly 1 in 1000 chance of you getting a random cat picture when issuing a command. Congrats!", color=0xffff00)
-#        embed.set_image(url=url)
-#        await message.channel.send(embed=embed)
-
     await bot.process_commands(message)
+
+@bot.event
+async def on_command_completion(ctx):
+    if random.random() < 0.001:
+        # Append a unique query parameter to the URL to prevent caching
+        url = f'https://cataas.com/cat?{random.random()}'
+        embed = discord.Embed(title="Easter Egg", description="There is roughly 1 in 1000 chance of you getting a random cat picture when issuing a command. Congrats!", color=0xffff00)
+        embed.set_image(url=url)
+        await ctx.send(embed=embed)
 
 @bot.event
 async def on_raw_reaction_add(payload):
