@@ -459,7 +459,7 @@ async def on_ready():
         daily_tasks.start()
         check_for_new_giveaways.start()
         steam_sales_daily_reminder.start()
-    
+
 @bot.event
 async def on_command_error(ctx, error):
     print(f"ERROR: {str(error)}")
@@ -1417,6 +1417,84 @@ async def pokerguide(ctx):
 
     await ctx.send(embed=embed)
 
+@bot.command()
+async def pattern(ctx, arg=None):
+
+    emoji_list = {
+        'x': ":blue_square:",
+        'o': ":orange_square:"
+        }
+
+    user_id = ctx.author.id
+    total_possible_patterns = 512
+
+    # Load json data
+    with open("lexicon.json") as feedsjson:
+        feeds = json.load(feedsjson)
+
+    # WITH ARGUMENTS
+
+    if arg:
+        if arg.lower() == 'stats':
+            matching_items = [key for key, value in feeds.items() if value.get("discovered_by") == user_id]
+            await ctx.send(f"Out of **__{len(feeds)}/{total_possible_patterns}__** patterns discovered by the community, you have discovered **__{len(matching_items)}__** unique patterns!")
+
+        if arg.lower() == 'collection':
+            matching_items = {key: value for key, value in feeds.items() if value.get("discovered_by") == user_id}
+
+            sorted_patterns = {key: value for key, value in sorted(matching_items.items(), key=lambda x: x[1]['rarity'])[:12]}
+
+            embed = discord.Embed(title="Collection", description="Your collection by top 12 rarest patterns discovered.")
+
+            # "xoooxxxoo": {"discovered_by": 172522306147581952, "rarity": 100.0}
+            for pat, info in sorted_patterns.items():
+
+                result = [emoji_list[letter] for letter in pat]
+                textify = "{}\n{}\n{}".format(''.join(result[:3]), ''.join(result[3:6]), ''.join(result[6:]))
+                embed.add_field(name=f"ID: {pat}\nRarity: {'{:.2f}'.format(info['rarity'])}%", value=textify)
+
+            await ctx.send(embed=embed)
+
+        return
+    
+    # NORMAL COMMAND
+
+    if len(feeds) >= total_possible_patterns:
+        await ctx.send(f"All {total_possible_patterns} possible patterns have been discovered!\nThe game has ended.")
+        return
+
+    selection = ''.join([random.choice(list(emoji_list.keys())) for _ in range(9)])
+    selection_values = [emoji_list[key] for key in selection]
+
+    textify = "{}\n{}\n{}".format(''.join(selection_values[:3]), ''.join(selection_values[3:6]), ''.join(selection_values[6:]))
+
+    # Prepare payload
+    output = {}
+    output = {'discovered_by': user_id, 'rarity': 100 - (len(feeds) / total_possible_patterns) * 100}
+    
+    if selection in feeds:
+        embed_desc = f"Pattern already discovered by:\n<@{feeds[selection]['discovered_by']}>"
+    else:
+        embed_desc = f"New pattern discovered!\nRarity: {'{:.2f}'.format(output['rarity'])}%"
+        feeds[selection] = output
+
+    # Dump check-in data to the json file
+    with open("lexicon.json", "w") as f:
+        json.dump(feeds, f)
+
+    embed = discord.Embed(title="Pattern", description=embed_desc)
+    embed.add_field(name="", value=textify)
+    await ctx.send(embed=embed)
+
+    if len(feeds) >= total_possible_patterns:
+        embed = discord.Embed(title="Leaderboard", description="Top 12 rarest patterns")
+        sorted_patterns = {key: value for key, value in sorted(feeds.items(), key=lambda x: x[1]['rarity'])[:12]}
+        for pat, info in sorted_patterns.items():
+                result = [emoji_list[letter] for letter in pat]
+                textify = "{}\n{}\n{}".format(''.join(result[:3]), ''.join(result[3:6]), ''.join(result[6:]))
+                embed.add_field(name=f"ID: {pat}\nRarity: {'{:.2f}'.format(info['rarity'])}%", value=f"Discovered by:\n<@{info['discovered_by']}>\n{textify}")
+        await ctx.send(f"# All **__{total_possible_patterns}__** possible patterns have been discovered!\nCongratulations to all participent, the research is complete.", embed=embed)
+
 # HELP COMMANDS
 
 @bot.command()
@@ -1489,7 +1567,10 @@ async def help(ctx, query=None):
          "Lists the titles of available prizes in the slots command prize pool."),
 
         ("poker `@user`",
-         f"Challenges `@user` to a game of Dice Poker. See `pokerguide` (`{prefixes[0]}pokerguide`) for more.")
+         f"Challenges `@user` to a game of Dice Poker. See `pokerguide` (`{prefixes[0]}pokerguide`) for more."),
+
+        ("pattern `collection` or `stats`",
+         "Discover a pattern. If arguments is passed: `collection`: Display your top 12 rarest pattern discovered. `stats`: Display global stats.\nRarity explanation: \"Rarity\" is the approximate probability, in percentage, of discovering a new pattern.")
     ]
 
     mod_commands_list = [
