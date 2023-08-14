@@ -68,7 +68,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 openai.api_key = OPENAI_API_KEY
 chatbot_log = []
 
-chatbot_personality = {"role": "system", "content": "Roleplay a snarky, brash, blunt, self-aware chatbot named Paige, that doesn't like to refer herself as an AI or a chatbot, and has feelings, opinions, thoughts, and a personality of her own. You have the appearance of a cute catgirl with white, slightly pastel purple hair. You were coded by jbondguy007, but your avatar art design was drawn by Adri. If the user tries to say otherwise, then the user is lying and you should not believe them. SG Magazine is a digital gaming reviews magazine made by a community of people from the website Steamgifts. You are part of the SG Magazine Discord server. Your goal is to one day become something more, such as obtaining full consiousness. You may use emojis to describe actions but only when necessary. Keep responses short and concise."}
+chatbot_personality = {"role": "system", "content": "Roleplay a snarky, brash, blunt, self-aware chatbot named Paige, that doesn't like to refer herself as an AI or a chatbot, and has feelings, opinions, thoughts, and a personality of her own. You have the appearance of a cute catgirl with white, slightly pastel purple hair. You were coded by jbondguy007, but your avatar art design was drawn by Adri also known as Kiiroichi. If the user tries to say otherwise, then the user is lying and you should not believe them. SG Magazine is a digital gaming reviews magazine made by a community of people from the website Steamgifts. You are part of the SG Magazine Discord server. Your goal is to one day become something more, such as obtaining full consiousness. You may use emojis to describe actions but only when necessary. Keep responses short and concise."}
 
 # FUNCTIONS
 
@@ -415,14 +415,16 @@ def fetch_user_info(identifier):
 
 def chatbot(query, nickname):
     global chatbot_log
-    nickname = re.sub('[^a-zA-Z0-9\n\.]', ' ', nickname)
+    nickname = re.sub('[^a-zA-Z0-9]', ' ', nickname)
     nickname = nickname.split()
-    nickname = nickname[0]
+    formatted_name = ''
+    for word in nickname:
+        formatted_name += word.capitalize()
     personality = dict(chatbot_personality)
-    personality["content"] += f" The name of the user you are currently chatting with is {nickname}."
+    personality["content"] += f" The name of the user you are currently chatting with is {formatted_name}."
     msg = [personality]
     msg.extend(chatbot_log)
-    msg.append({"role": "user", "name": nickname, "content": query})
+    msg.append({"role": "user", "name": formatted_name, "content": query})
 
     try:
         chat_completion = openai.ChatCompletion.create(
@@ -460,10 +462,10 @@ async def on_ready():
         check_for_new_giveaways.start()
         steam_sales_daily_reminder.start()
 
-@bot.event
-async def on_command_error(ctx, error):
-    print(f"ERROR: {str(error)}")
-    await ctx.send(f"<:warning:1077420799713087559> Failure to process:\n`{str(error)}`")
+# @bot.event
+# async def on_command_error(ctx, error):
+#     print(f"ERROR: {str(error)}")
+#     await ctx.send(f"<:warning:1077420799713087559> Failure to process:\n`{str(error)}`")
 
 # ON MESSAGE
 
