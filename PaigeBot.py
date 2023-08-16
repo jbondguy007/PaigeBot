@@ -19,6 +19,8 @@ from discord import message
 from dotenv import load_dotenv
 from bs4 import BeautifulSoup as bs
 from collections import Counter
+from PIL import Image, ImageFont, ImageDraw
+from io import BytesIO
 
 # BOT INFO
 
@@ -30,6 +32,7 @@ bot_platform = [platform.system(), platform.release(), platform.python_version()
 # VARIABLES
 
 slots_cooldown = timedelta(hours=6)
+pokemembers_cooldown = timedelta(hours=1)
 
 bot_color = 0x9887ff
 
@@ -52,6 +55,7 @@ role_premiumreviewer = 1104817858162204752
 role_editors = 1068243558412341379
 role_readers = 1082686523088048138
 role_interviewers = 1132003617046528050
+role_bots = 1067986921021788261
 
 with open("permanent_variables.json", "r") as f:
     permanent_variables = json.load(f)
@@ -460,7 +464,7 @@ async def on_ready():
     if not bot.user.id == 823385752486412290:
         daily_tasks.start()
         check_for_new_giveaways.start()
-        steam_sales_daily_reminder.start()
+        # steam_sales_daily_reminder.start()
 
 # @bot.event
 # async def on_command_error(ctx, error):
@@ -920,7 +924,7 @@ async def profile(ctx, *query):
     else:
         await ctx.send(f"Unable to find any user associated with the nickname/ID `{query}`. Check spelling and case-sensitivity, and try again?")
 
-def log_checkin(ctx):
+def log_checkin(ctx, file='slots_checkin.json'):
     '''
     Gathers the user's info and the time of running
     this command, and adds it to the json file.
@@ -934,26 +938,26 @@ def log_checkin(ctx):
     output = {'user': username, 'checkin': start}
 
     # Load json data
-    with open("slots_checkin.json") as feedsjson:
+    with open(file) as feedsjson:
         feeds = json.load(feedsjson)
     
     feeds[str(userid)] = output
 
     # Dump check-in data to the json file
-    with open("slots_checkin.json", "w") as f:
+    with open(file, "w") as f:
         json.dump(feeds, f)
 
-def checkin_check(ctx):
+def checkin_check(ctx, file='slots_checkin.json', cooldown=slots_cooldown):
     '''
     Handles checking in, including running
     the log_checkin() command as needed.
     '''
-    cooldown = slots_cooldown
+    cooldown = cooldown
     end = datetime.now().replace(microsecond=0)
     userid = ctx.author.id
 
     # Load json data
-    with open("slots_checkin.json", "r") as f:
+    with open(file, "r") as f:
         data = json.load(f)
 
     # Fetches the last check-in time for the user, or None if they have never checked in
@@ -1419,83 +1423,229 @@ async def pokerguide(ctx):
 
     await ctx.send(embed=embed)
 
-@bot.command()
-async def pattern(ctx, arg=None):
+def tc_role(user):
+    roles = [role for role in user.roles]
+    roles.reverse()
 
-    emoji_list = {
-        'x': ":blue_square:",
-        'o': ":orange_square:"
-        }
+    # Rarity by role
+    for role in roles:
 
-    user_id = ctx.author.id
-    total_possible_patterns = 512
+        if role.id in [role_founders, role_bots, 1077424706719854595]:
+            rarity = "Ultra Ultra Rare"
+            return (rarity, role)
+        
+        elif role.id in [role_staff, role_officers, role_editors, 652201011355713598, 1079261309276790784]:
+            rarity = "Ultra Rare"
+            return (rarity, role)
+        
+        elif role.id in [role_officers, role_editors]:
+            rarity = "Rare"
+            return (rarity, role)
+        
+        elif role.id in [role_premiumreviewer, role_contributors]:
+            rarity = "Exceptional"
+            return (rarity, role)
+        
+        elif role.id == role_fullmember:
+            rarity = "Uncommon"
+            return (rarity, role)
+        
+        elif role.id == role_reviewer:
+            rarity = "Common"
+            return (rarity, role)
+        
+    rarity = "Ordinary"
+    return (rarity, role)
 
-    # Load json data
-    with open("lexicon.json") as feedsjson:
-        feeds = json.load(feedsjson)
+        # if any(role in [role_founders, role_bots, 1077424706719854595] for role in roles):
+        #     rarity = "Ultra Ultra Rare"
+        # elif any(role in [role_staff, role_officers, role_editors, 652201011355713598] for role in roles):
+        #     rarity = "Ultra Rare"
+        # elif any(role in [role_officers, role_editors] for role in roles):
+        #     rarity = "Rare"
+        # elif any(role in [role_premiumreviewer, role_contributors, 1079261309276790784] for role in roles):
+        #     rarity = "Exceptional"
+        # elif role_fullmember in roles:
+        #     rarity = "Uncommon"
+        # elif role_reviewer in roles:
+        #     rarity = "Common"
+        # else:
+        #     rarity = "Ordinary"
+        
+    # return rarity
 
-    # WITH ARGUMENTS
+def tc_generator(user):
+    pfp = user.avatar
+    rarity, role = tc_role(user)
+    user_join_date = user.joined_at.strftime("%m/%d/%Y")
 
-    if arg:
-        if arg.lower() == 'stats':
-            matching_items = [key for key, value in feeds.items() if value.get("discovered_by") == user_id]
-            await ctx.send(f"Out of **__{len(feeds)}/{total_possible_patterns}__** patterns discovered by the community, you have discovered **__{len(matching_items)}__** unique patterns!")
+    base_img  = Image.new( mode = "RGBA", size = (300, 400) )
 
-        if arg.lower() == 'collection':
-            matching_items = {key: value for key, value in feeds.items() if value.get("discovered_by") == user_id}
+    try:
+        response = requests.get(pfp)
+        img = Image.open(BytesIO(response.content)).convert('RGBA')
+    except:
+        img = Image.open('tradingcards/templates/default_pfp.png').convert('RGBA')
 
-            sorted_patterns = {key: value for key, value in sorted(matching_items.items(), key=lambda x: x[1]['rarity'])[:12]}
-
-            embed = discord.Embed(title="Collection", description="Your collection by top 12 rarest patterns discovered.")
-
-            # "xoooxxxoo": {"discovered_by": 172522306147581952, "rarity": 100.0}
-            for pat, info in sorted_patterns.items():
-
-                result = [emoji_list[letter] for letter in pat]
-                textify = "{}\n{}\n{}".format(''.join(result[:3]), ''.join(result[3:6]), ''.join(result[6:]))
-                embed.add_field(name=f"ID: {pat}\nRarity: {'{:.2f}'.format(info['rarity'])}%", value=textify)
-
-            await ctx.send(embed=embed)
-
-        return
+    # Open the card and profile picture images
+    profile_img = img.resize( size=(260, 260) )
+    tc_img = Image.open(f'tradingcards/templates/tc_template_{rarity}.png')
     
-    # NORMAL COMMAND
 
-    if len(feeds) >= total_possible_patterns:
-        await ctx.send(f"All {total_possible_patterns} possible patterns have been discovered!\nThe game has ended.")
-        return
+    # Convert the overlay image to RGBA mode
+    tc_img = tc_img.convert('RGBA')
 
-    selection = ''.join([random.choice(list(emoji_list.keys())) for _ in range(9)])
-    selection_values = [emoji_list[key] for key in selection]
+    # Overlay the card over the profile picture
+    base_img.paste(profile_img, (20, 50), profile_img)
+    base_img.paste(tc_img, (0, 0), tc_img)
 
-    textify = "{}\n{}\n{}".format(''.join(selection_values[:3]), ''.join(selection_values[3:6]), ''.join(selection_values[6:]))
+    # Fonts setup
+    font = ImageFont.truetype("arial.ttf", 17)
+    font_small = ImageFont.truetype("arial.ttf", 12)
 
-    # Prepare payload
-    output = {}
-    output = {'discovered_by': user_id, 'rarity': 100 - (len(feeds) / total_possible_patterns) * 100}
+    draw = ImageDraw.Draw(base_img)
+    _, _, w, h = draw.textbbox((0, 0), user.name, font=font)
+
+    draw.text(((300-w)/2, 17), user.name, font=font, fill="black")
+    draw.text((30, 60), rarity, font=font, fill="cyan", stroke_width=1, stroke_fill="black")
+
+    draw.text((25, 325), f"Role: {role.name}\nJoin Date: {user_join_date}\nRarity: {rarity}\nID: {user.id}", font=font_small, fill="black")
+
+    # Save the resulting image
+    base_img.save(f'tradingcards/generated/{user.id}.png')
+
+# @bot.command()
+# async def pfp(ctx, me=None):
+#     if not me:
+#         server_members = [x for x in ctx.guild.members]
+#         member_get = random.choice(server_members)
+
+#         user = member_get
+#     else:
+#         user = ctx.author
+
+#     tc_generator(user)
+
+#     file = discord.File(f'tradingcards/generated/{user.id}.png')
+
+#     embed = discord.Embed(title=user.name, color=bot_color)
+#     embed.set_image(url=f'attachment://{user.id}.png')
+#     await ctx.send(embed=embed, file=file)
+
+# @bot.command()
+# async def pm(ctx):
+#     server_members = [x for x in ctx.guild.members]
+#     member_get = server_members[0]
+#     roles = [x.id for x in member_get.roles]
+
+# @bot.command()
+# async def members(ctx):
+#     file = 'pokemembers.json'
+
+#     allowed, cooldown = checkin_check(ctx, file=file, cooldown=pokemembers_cooldown)
+
+#     if not allowed:
+#         await ctx.send(f"Please wait `{cooldown}` before trying again!")
+#         return
     
-    if selection in feeds:
-        embed_desc = f"Pattern already discovered by:\n<@{feeds[selection]['discovered_by']}>"
-    else:
-        embed_desc = f"New pattern discovered!\nRarity: {'{:.2f}'.format(output['rarity'])}%"
-        feeds[selection] = output
+#     # Log the check-in time to the json file
+#     log_checkin(ctx, file=file)
+    
+#     server_members = [x for x in ctx.guild.members]
+#     member_get = random.choice(server_members)
+#     member_roles = [x.id for x in member_get.roles]
 
-    # Dump check-in data to the json file
-    with open("lexicon.json", "w") as f:
-        json.dump(feeds, f)
+#     if 1081477294218039296 in member_roles:
+#         print("You have test role")
+#     else:
+#         print("No test role")
 
-    embed = discord.Embed(title="Pattern", description=embed_desc)
-    embed.add_field(name="", value=textify)
-    await ctx.send(embed=embed)
+#     # Prepare payload
+#     output = {
+#         'member': member_get,
+#         'rarity': 0}
 
-    if len(feeds) >= total_possible_patterns:
-        embed = discord.Embed(title="Leaderboard", description="Top 12 rarest patterns")
-        sorted_patterns = {key: value for key, value in sorted(feeds.items(), key=lambda x: x[1]['rarity'])[:12]}
-        for pat, info in sorted_patterns.items():
-                result = [emoji_list[letter] for letter in pat]
-                textify = "{}\n{}\n{}".format(''.join(result[:3]), ''.join(result[3:6]), ''.join(result[6:]))
-                embed.add_field(name=f"ID: {pat}\nRarity: {'{:.2f}'.format(info['rarity'])}%", value=f"Discovered by:\n<@{info['discovered_by']}>\n{textify}")
-        await ctx.send(f"# All **__{total_possible_patterns}__** possible patterns have been discovered!\nCongratulations to all participent, the research is complete.", embed=embed)
+#     with open(file) as feedsjson:
+#         feeds = json.load(feedsjson)
+
+# # TODO
+# @bot.command()
+# async def pattern(ctx, arg=None):
+
+#     emoji_list = {
+#         'x': ":blue_square:",
+#         'o': ":orange_square:"
+#         }
+
+#     user_id = ctx.author.id
+#     total_possible_patterns = 512
+
+#     # Load json data
+#     with open("lexicon.json") as feedsjson:
+#         feeds = json.load(feedsjson)
+
+#     # WITH ARGUMENTS
+
+#     if arg:
+#         if arg.lower() == 'stats':
+#             matching_items = [key for key, value in feeds.items() if value.get("discovered_by") == user_id]
+#             await ctx.send(f"Out of **__{len(feeds)}/{total_possible_patterns}__** patterns discovered by the community, you have discovered **__{len(matching_items)}__** unique patterns!")
+
+#         if arg.lower() == 'collection':
+#             matching_items = {key: value for key, value in feeds.items() if value.get("discovered_by") == user_id}
+
+#             sorted_patterns = {key: value for key, value in sorted(matching_items.items(), key=lambda x: x[1]['rarity'])[:12]}
+
+#             embed = discord.Embed(title="Collection", description="Your collection by top 12 rarest patterns discovered.")
+
+#             # "xoooxxxoo": {"discovered_by": 172522306147581952, "rarity": 100.0}
+#             for pat, info in sorted_patterns.items():
+
+#                 result = [emoji_list[letter] for letter in pat]
+#                 textify = "{}\n{}\n{}".format(''.join(result[:3]), ''.join(result[3:6]), ''.join(result[6:]))
+#                 embed.add_field(name=f"ID: {pat}\nRarity: {'{:.2f}'.format(info['rarity'])}%", value=textify)
+
+#             await ctx.send(embed=embed)
+
+#         return
+    
+#     # NORMAL COMMAND
+
+#     if len(feeds) >= total_possible_patterns:
+#         await ctx.send(f"All {total_possible_patterns} possible patterns have been discovered!\nThe game has ended.")
+#         return
+
+#     selection = ''.join([random.choice(list(emoji_list.keys())) for _ in range(9)])
+#     selection_values = [emoji_list[key] for key in selection]
+
+#     textify = "{}\n{}\n{}".format(''.join(selection_values[:3]), ''.join(selection_values[3:6]), ''.join(selection_values[6:]))
+
+#     # Prepare payload
+#     output = {}
+#     output = {'discovered_by': user_id, 'rarity': 100 - (len(feeds) / total_possible_patterns) * 100}
+    
+#     if selection in feeds:
+#         embed_desc = f"Pattern already discovered by:\n<@{feeds[selection]['discovered_by']}>"
+#     else:
+#         embed_desc = f"New pattern discovered!\nRarity: {'{:.2f}'.format(output['rarity'])}%"
+#         feeds[selection] = output
+
+#     # Dump check-in data to the json file
+#     with open("lexicon.json", "w") as f:
+#         json.dump(feeds, f)
+
+#     embed = discord.Embed(title="Pattern", description=embed_desc)
+#     embed.add_field(name="", value=textify)
+#     await ctx.send(embed=embed)
+
+#     if len(feeds) >= total_possible_patterns:
+#         embed = discord.Embed(title="Leaderboard", description="Top 12 rarest patterns")
+#         sorted_patterns = {key: value for key, value in sorted(feeds.items(), key=lambda x: x[1]['rarity'])[:12]}
+#         for pat, info in sorted_patterns.items():
+#                 result = [emoji_list[letter] for letter in pat]
+#                 textify = "{}\n{}\n{}".format(''.join(result[:3]), ''.join(result[3:6]), ''.join(result[6:]))
+#                 embed.add_field(name=f"ID: {pat}\nRarity: {'{:.2f}'.format(info['rarity'])}%", value=f"Discovered by:\n<@{info['discovered_by']}>\n{textify}")
+#         await ctx.send(f"# All **__{total_possible_patterns}__** possible patterns have been discovered!\nCongratulations to all participent, the research is complete.", embed=embed)
 
 # HELP COMMANDS
 
@@ -1569,10 +1719,7 @@ async def help(ctx, query=None):
          "Lists the titles of available prizes in the slots command prize pool."),
 
         ("poker `@user`",
-         f"Challenges `@user` to a game of Dice Poker. See `pokerguide` (`{prefixes[0]}pokerguide`) for more."),
-
-        ("pattern `collection` or `stats`",
-         "Discover a pattern. If arguments is passed: `collection`: Display your top 12 rarest pattern discovered. `stats`: Display global stats.\nRarity explanation: \"Rarity\" is the approximate probability, in percentage, of discovering a new pattern.")
+         f"Challenges `@user` to a game of Dice Poker. See `pokerguide` (`{prefixes[0]}pokerguide`) for more.")
     ]
 
     mod_commands_list = [
