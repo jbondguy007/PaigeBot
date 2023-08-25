@@ -1493,8 +1493,10 @@ def tc_generator(user, holo=True):
         # base_img = brightness.enhance(1.2)
 
     # Fonts setup
-    font = ImageFont.truetype("dejavu.ttf", 17)
-    font_small = ImageFont.truetype("dejavu.ttf", 12)
+
+    # IF TESTING: Set to arial.ttf
+    font = ImageFont.truetype("DejaVuSans.ttf", 17)
+    font_small = ImageFont.truetype("DejaVuSans.ttf", 12)
     draw = ImageDraw.Draw(base_img)
     _, _, w, h = draw.textbbox((0, 0), f"{user.name}{' (HOLO)' if holo else ''}", font=font)
 
@@ -1563,7 +1565,7 @@ def binder_generator(user):
         img = Image.open(f'tradingcards/generated/{card}.png').convert('RGBA').resize(size=(xsize, ysize))
 
         # Fonts setup
-        font = ImageFont.truetype("dejavu.ttf", 40)
+        font = ImageFont.truetype("DejaVuSans.ttf", 40)
         draw = ImageDraw.Draw(img)
         # Card name text
         draw.text((xsize-20, ysize-50), str(info['count']), font=font, fill="white", stroke_width=3, stroke_fill="black", anchor="ra")
@@ -2317,10 +2319,17 @@ async def check_for_new_giveaways():
 
 # Changed to a manual command due to the risk of crashing PaigeBot - RE-ENABLED
 
-@tasks.loop(hours=24)
+@tasks.loop(hours=1)
 async def daily_tasks():
-    fetch_members_owned_games()
-    steamID_to_name()
+    time = datetime.now().hour
+    if time == 6:
+        cha = bot.get_channel(bot_channel)
+        await cha.send("Running daily task `fetch_members_owned_games()`...")
+        fetch_members_owned_games()
+        await cha.send("Done!")
+        await cha.send("Running daily task `steamID_to_name()`...")
+        steamID_to_name()
+        await cha.send("Done!")
 
 @tasks.loop(hours=1)
 async def steam_sales_daily_reminder():
