@@ -967,7 +967,7 @@ def checkin_check(ctx, file='slots_checkin.json', cooldown=slots_cooldown):
 
     # If they never checked in, process check-in
     if not start:
-        log_checkin(ctx)
+        log_checkin(ctx, file=file)
     
     # Otherwise, check if they pass the cooldown check
     else:
