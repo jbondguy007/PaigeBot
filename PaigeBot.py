@@ -19,8 +19,9 @@ from discord import message
 from dotenv import load_dotenv
 from bs4 import BeautifulSoup as bs
 from collections import Counter
-from PIL import Image, ImageFont, ImageDraw
+from PIL import Image, ImageFont, ImageDraw, ImageEnhance
 from io import BytesIO
+from fractions import Fraction
 
 # BOT INFO
 
@@ -32,7 +33,8 @@ bot_platform = [platform.system(), platform.release(), platform.python_version()
 # VARIABLES
 
 slots_cooldown = timedelta(hours=6)
-pokemembers_cooldown = timedelta(hours=1)
+tc_cooldown = timedelta(hours=24)
+tc_holo_rarity = 0.04
 
 bot_color = 0x9887ff
 
@@ -945,7 +947,7 @@ def log_checkin(ctx, file='slots_checkin.json'):
 
     # Dump check-in data to the json file
     with open(file, "w") as f:
-        json.dump(feeds, f)
+        json.dump(feeds, f, indent=4)
 
 def checkin_check(ctx, file='slots_checkin.json', cooldown=slots_cooldown):
     '''
@@ -1430,15 +1432,15 @@ def tc_role(user):
     # Rarity by role
     for role in roles:
 
-        if role.id in [role_founders, role_bots, 1077424706719854595]:
+        if role.id in [role_founders, role_bots]:
             rarity = "Ultra Ultra Rare"
             return (rarity, role)
         
-        elif role.id in [role_staff, role_officers, role_editors, 652201011355713598, 1079261309276790784]:
+        elif role.id in [role_staff, role_officers]:
             rarity = "Ultra Rare"
             return (rarity, role)
         
-        elif role.id in [role_officers, role_editors]:
+        elif role.id in [role_editors, role_interviewers]:
             rarity = "Rare"
             return (rarity, role)
         
@@ -1457,195 +1459,523 @@ def tc_role(user):
     rarity = "Ordinary"
     return (rarity, role)
 
-        # if any(role in [role_founders, role_bots, 1077424706719854595] for role in roles):
-        #     rarity = "Ultra Ultra Rare"
-        # elif any(role in [role_staff, role_officers, role_editors, 652201011355713598] for role in roles):
-        #     rarity = "Ultra Rare"
-        # elif any(role in [role_officers, role_editors] for role in roles):
-        #     rarity = "Rare"
-        # elif any(role in [role_premiumreviewer, role_contributors, 1079261309276790784] for role in roles):
-        #     rarity = "Exceptional"
-        # elif role_fullmember in roles:
-        #     rarity = "Uncommon"
-        # elif role_reviewer in roles:
-        #     rarity = "Common"
-        # else:
-        #     rarity = "Ordinary"
-        
-    # return rarity
-
-def tc_generator(user):
+def tc_generator(user, holo=True):
     pfp = user.avatar
     rarity, role = tc_role(user)
     user_join_date = user.joined_at.strftime("%m/%d/%Y")
 
+    # Setup a base image
     base_img  = Image.new( mode = "RGBA", size = (300, 400) )
 
+    # Open the profile picture image
     try:
         response = requests.get(pfp)
         img = Image.open(BytesIO(response.content)).convert('RGBA')
     except:
         img = Image.open('tradingcards/templates/default_pfp.png').convert('RGBA')
-
-    # Open the card and profile picture images
     profile_img = img.resize( size=(260, 260) )
-    tc_img = Image.open(f'tradingcards/templates/tc_template_{rarity}.png')
-    
 
-    # Convert the overlay image to RGBA mode
-    tc_img = tc_img.convert('RGBA')
+    # Open the card template and holo images
+    tc_img = Image.open(f'tradingcards/templates/tc_template_{rarity}.png').convert('RGBA')
+    holo_img = Image.open('tradingcards/templates/holo.png').convert('RGBA')
 
     # Overlay the card over the profile picture
     base_img.paste(profile_img, (20, 50), profile_img)
     base_img.paste(tc_img, (0, 0), tc_img)
 
+    # Setup for holo cards
+    if holo:
+        # base_img = Image.blend(base_img, holo_img, .3)
+        base_img = Image.alpha_composite(base_img, holo_img)
+        contrast = ImageEnhance.Contrast(base_img)
+        base_img = contrast.enhance(1.2)
+        # brightness = ImageEnhance.Brightness(base_img)
+        # base_img = brightness.enhance(1.2)
+
     # Fonts setup
     font = ImageFont.truetype("arial.ttf", 17)
     font_small = ImageFont.truetype("arial.ttf", 12)
-
     draw = ImageDraw.Draw(base_img)
-    _, _, w, h = draw.textbbox((0, 0), user.name, font=font)
+    _, _, w, h = draw.textbbox((0, 0), f"{user.name}{' (HOLO)' if holo else ''}", font=font)
 
-    draw.text(((300-w)/2, 17), user.name, font=font, fill="black")
-    draw.text((30, 60), rarity, font=font, fill="cyan", stroke_width=1, stroke_fill="black")
+    # Card name text
+    draw.text(((300-w)/2, 16), f"{user.name}{' (HOLO)' if holo else ''}", font=font, fill="black", stroke_width=3, stroke_fill="#AAFFFF" if holo else "white")
 
-    draw.text((25, 325), f"Role: {role.name}\nJoin Date: {user_join_date}\nRarity: {rarity}\nID: {user.id}", font=font_small, fill="black")
+    # Card rarity/holo text
+    draw.text((30, 60), '{0}\n{1}'.format(rarity, 'HOLO' if holo else ''), font=font, fill="#55FFFF" if holo else "yellow", stroke_width=2, stroke_fill="black")
+
+    # Card details text
+    draw.text((25, 325), f"Role: {role.name}\nJoin Date: {user_join_date}\nRarity: {rarity}\nID: {user.id}{'_holo' if holo else ''}", font=font_small, fill="black")
 
     # Save the resulting image
-    base_img.save(f'tradingcards/generated/{user.id}.png')
+    card = f"{user.id}{'_holo' if holo else ''}"
+    base_img.save(f'tradingcards/generated/{card}.png')
+    return (card, rarity)
 
-# @bot.command()
-# async def pfp(ctx, me=None):
-#     if not me:
-#         server_members = [x for x in ctx.guild.members]
-#         member_get = random.choice(server_members)
+def binder_generator(user):
+    # Load json data
+    with open('tradingcards/database.json') as feedsjson:
+        feeds = json.load(feedsjson)
 
-#         user = member_get
-#     else:
-#         user = ctx.author
+    player_collection_unsorted = feeds[str(user)]
 
-#     tc_generator(user)
+    # Define the rarity order
+    rarity_order = {
+        "Ultra Ultra Rare": 1,
+        "Ultra Rare": 2,
+        "Rare": 3,
+        "Exceptional": 4,
+        "Uncommon": 5,
+        "Common": 6,
+        "Ordinary": 7,
+    }
 
-#     file = discord.File(f'tradingcards/generated/{user.id}.png')
+# Define a custom sorting key function
+    def sorting_key(item):
+        rarity_value = rarity_order.get(item[1]['rarity'], float('inf'))
+        holo_value = 0 if item[1]['holo'] else 1  # Invert holo value for prioritization
+        return (holo_value, rarity_value)
 
-#     embed = discord.Embed(title=user.name, color=bot_color)
-#     embed.set_image(url=f'attachment://{user.id}.png')
-#     await ctx.send(embed=embed, file=file)
+    # Sort the dictionary using the custom sorting key
+    player_collection = {
+        k: v for k, v in sorted(player_collection_unsorted.items(), key=sorting_key)
+    }
 
-# @bot.command()
-# async def pm(ctx):
-#     server_members = [x for x in ctx.guild.members]
-#     member_get = server_members[0]
-#     roles = [x.id for x in member_get.roles]
+    x = 0
+    y = 0
+    zoom = 1.2
+    xsize = int(150.0*zoom)
+    ysize = int(200.0*zoom)
+    col = 5
+    row = 5
+    lines = 1
+    items = 0
+    binder_count = 1
+    returned_value = []
 
-# @bot.command()
-# async def members(ctx):
-#     file = 'pokemembers.json'
+    max_per_page = col*row
 
-#     allowed, cooldown = checkin_check(ctx, file=file, cooldown=pokemembers_cooldown)
+    # Setup a base image
+    base_img  = Image.new( mode = "RGBA", size = (xsize*col, ysize*row) )
 
-#     if not allowed:
-#         await ctx.send(f"Please wait `{cooldown}` before trying again!")
-#         return
-    
-#     # Log the check-in time to the json file
-#     log_checkin(ctx, file=file)
-    
-#     server_members = [x for x in ctx.guild.members]
-#     member_get = random.choice(server_members)
-#     member_roles = [x.id for x in member_get.roles]
+    for card, info in player_collection.items():
+        # Open the card image
+        img = Image.open(f'tradingcards/generated/{card}.png').convert('RGBA').resize(size=(xsize, ysize))
 
-#     if 1081477294218039296 in member_roles:
-#         print("You have test role")
-#     else:
-#         print("No test role")
+        # Fonts setup
+        font = ImageFont.truetype("arial.ttf", 40)
+        draw = ImageDraw.Draw(img)
+        # Card name text
+        draw.text((xsize-20, ysize-50), str(info['count']), font=font, fill="white", stroke_width=3, stroke_fill="black", anchor="ra")
 
-#     # Prepare payload
-#     output = {
-#         'member': member_get,
-#         'rarity': 0}
+        base_img.paste(img, (x, y), img)
 
-#     with open(file) as feedsjson:
-#         feeds = json.load(feedsjson)
+        if lines in [col + i * row for i in range(row)]:
+            y += ysize
+            x = 0
+        else:
+            x += xsize
+        lines += 1
+        items += 1
 
-# # TODO
-# @bot.command()
-# async def pattern(ctx, arg=None):
+        # If the number of cards exceeds the page size, create a second binder
+        if items == (col*row)*binder_count:
+            binder = f'binder{binder_count}'
+            returned_value.append(binder)
+            base_img.save(f'tradingcards/generated/{binder}.png')
+            base_img  = Image.new( mode = "RGBA", size = (xsize*col, ysize*row) )
+            binder_count += 1
+            lines = 1
+            x = 0
+            y = 0
+            continue
 
-#     emoji_list = {
-#         'x': ":blue_square:",
-#         'o': ":orange_square:"
-#         }
+        elif len(player_collection) == items:
+            binder = f'binder{binder_count}'
+            returned_value.append(binder)
+            base_img.save(f'tradingcards/generated/{binder}.png')
+            break
 
-#     user_id = ctx.author.id
-#     total_possible_patterns = 512
+    return returned_value
 
-#     # Load json data
-#     with open("lexicon.json") as feedsjson:
-#         feeds = json.load(feedsjson)
+@bot.command()
+async def tc(ctx, *args):
 
-#     # WITH ARGUMENTS
+    # WITH ARGUMENTS
 
-#     if arg:
-#         if arg.lower() == 'stats':
-#             matching_items = [key for key, value in feeds.items() if value.get("discovered_by") == user_id]
-#             await ctx.send(f"Out of **__{len(feeds)}/{total_possible_patterns}__** patterns discovered by the community, you have discovered **__{len(matching_items)}__** unique patterns!")
+    if args:
 
-#         if arg.lower() == 'collection':
-#             matching_items = {key: value for key, value in feeds.items() if value.get("discovered_by") == user_id}
+        # Load json data
+        with open('tradingcards/database.json') as feedsjson:
+            feeds = json.load(feedsjson)
 
-#             sorted_patterns = {key: value for key, value in sorted(matching_items.items(), key=lambda x: x[1]['rarity'])[:12]}
+        if args[0].lower() == 'binder':
 
-#             embed = discord.Embed(title="Collection", description="Your collection by top 12 rarest patterns discovered.")
+            try:
+                binders = binder_generator(ctx.author.id)
+            except:
+                await ctx.send("Empty binder!")
+                return
+            
+            # Prep and send the embed
+            for i, binder in enumerate(binders):
+                file = discord.File(f'tradingcards/generated/{binder}.png')
+                embed = discord.Embed(title=f"{ctx.author.name}'s Binder Page {str(i+1)}", color=bot_color)
+                embed.set_image(url=f'attachment://{binder}.png')
+                    
+                await ctx.send(embed=embed, file=file)
 
-#             # "xoooxxxoo": {"discovered_by": 172522306147581952, "rarity": 100.0}
-#             for pat, info in sorted_patterns.items():
+        elif args[0].lower() == 'view':
 
-#                 result = [emoji_list[letter] for letter in pat]
-#                 textify = "{}\n{}\n{}".format(''.join(result[:3]), ''.join(result[3:6]), ''.join(result[6:]))
-#                 embed.add_field(name=f"ID: {pat}\nRarity: {'{:.2f}'.format(info['rarity'])}%", value=textify)
+            try:
+                queried_card = args[1]
+            except:
+                await ctx.send(f"Command is `{prefixes[0]}tc view card-ID-here`")
+                return
+            
+            if str(ctx.author.id) in feeds:
 
-#             await ctx.send(embed=embed)
+                for cardID, card in feeds[str(ctx.author.id)].items():
+                    if f"{card['user']}{' (HOLO)' if card['holo'] else ''}" == queried_card:
+                        card_id = cardID
+                        break
+                
+                else:
+                    try:
+                        card_check = feeds[str(ctx.author.id)][queried_card]
+                        card_id = queried_card
+                    except:
+                        pass
+                
+                if card_id:
 
-#         return
+                    card = feeds[str(ctx.author.id)][card_id]
+
+                    # Prep and send the embed
+                    file = discord.File(f'tradingcards/generated/{card_id}.png')
+                    embed = discord.Embed(title=f"{ctx.author.name}'s \"{card['user']}{' (HOLO)' if card['holo'] else ''}\"", description=f"{card_id}", color=bot_color)
+                    embed.set_image(url=f'attachment://{card_id}.png')
+
+                    await ctx.send(embed=embed, file=file)
+                    return
+            
+            await ctx.send(f"Card `{queried_card}` not found in your binder! Are you sure you own it?")
+        
+        elif args[0].lower() == 'offer':
+
+            try:
+                user = await commands.MemberConverter().convert(ctx, args[1])
+            except:
+                await ctx.send(f"{args[1]} is not a valid user.")
+                return
+            
+            try:
+                give = args[2]
+                take = args[3]
+                user_name = user.name
+
+                if user.id == ctx.author.id:
+                    await ctx.send(f"Cannot send trades to self.")
+                    return
+
+                try:
+                    if feeds[str(ctx.author.id)][give]:
+                        pass
+                except:
+                    await ctx.send(f"`{give}` not found in {ctx.author.name}'s binder!")
+                    return
+
+                try:
+                    if feeds[str(user.id)][take]:
+                        pass
+                except:
+                    await ctx.send(f"`{take}` not found in {user_name}'s binder!")
+                    return
+                
+                with open('tradingcards/trades.json') as feedsjson:
+                    trades = json.load(feedsjson)
+
+                if str(user.id) not in trades:
+                    trades[str(user.id)] = {}
+
+                trades[str(user.id)][str(ctx.message.id)] = {
+                    "from": ctx.author.id,
+                    "H": (
+                        give,
+                        feeds[str(ctx.author.id)][give]
+                    ),
+                    "W": (
+                        take,
+                        feeds[str(user.id)][take]
+                    )
+                }
+
+                with open("tradingcards/trades.json", "w") as f:
+                    json.dump(trades, f, indent=4)
+
+                given = feeds[str(ctx.author.id)][give]
+                taken = feeds[str(user.id)][take]
+                await ctx.send(f"Offered a trade to {user_name} - [H] `{given['user']}{' (HOLO)' if given['holo'] else ''}` [W] `{taken['user']}{' (HOLO)' if taken['holo'] else ''}` (trade ID: {ctx.message.id})")
+
+            except:
+                await ctx.send("There was an issue submitting the trade. Make sure you have the correct userID!")
+        
+        elif args[0].lower() == 'trades':
+            with open('tradingcards/trades.json') as feedsjson:
+                trades = json.load(feedsjson)
+            
+            with open('tradingcards/database.json') as feedsjson:
+                feeds = json.load(feedsjson)
+
+            try:
+                trades = trades[str(ctx.author.id)]
+            except:
+                await ctx.send("You have no trading cards trade offers pending.")
+                return
+            
+            embed = discord.Embed(title=f"{ctx.author.name}'s Trade Offers", description=f"Issue the command `{prefixes[0]}tc accept trade-ID` to accept trades, or `{prefixes[0]}tc reject trade-ID` to reject them.")
+
+            for tradeID, details in trades.items():
+                
+                # EXAMPLE:
+                    # tradeID: 1142364330424279111
+                    # Details: {'from': 172522306147581952, 'H': ['479319946153689098_holo', {'user': 'Captain Monocle', 'rarity': 'Ordinary', 'holo': True, 'count': 25}], 'W': ['823385752486412290', {'user': 'FoxyBoi', 'rarity': 'Ordinary', 'holo': False, 'count': 1}]}
+
+                trader = details['from']
+                user = ctx.author.id
+
+                given_card = details['H']
+                requested_card = details['W']
+
+                try:
+                    receive = feeds[str(trader)][given_card[0]]
+                except:
+                    continue
+                    # await ctx.send(f"{bot.get_user(trader).name} no longer has {given_card[1]['user']}{' (HOLO)' if given_card[1]['holo'] else ''} in their binder!")
+                    # return
+
+                try:
+                    deliver = feeds[str(user)][requested_card[0]]
+                except:
+                    continue
+
+                embed.add_field(
+                    name=f"Trade ID: {tradeID}",
+                    value=f"From: <@{trader}>\n[H]: {receive['user']}{' (HOLO)' if receive['holo'] else ''}\n[W]: {deliver['user']}{' (HOLO)' if deliver['holo'] else ''}",
+                    inline=False
+                )
+            
+            await ctx.send(embed=embed)
+
+        elif args[0].lower() == 'accept' or args[0].lower() == 'reject':
+
+            with open('tradingcards/trades.json') as feedsjson:
+                trades = json.load(feedsjson)
+            
+            trade_id = args[1]
+            user_id = str(ctx.author.id)
+
+            if args[0].lower() == 'reject':
+                # Delete trade offer
+                del trades[user_id][trade_id]
+                await ctx.send("Trade offer rejected!")
+                return
+
+            try:
+                trade = trades[user_id][trade_id]
+            except:
+                await ctx.send(f"No pending trade with trade ID `{trade_id}` found!")
+                return
+            
+            trader_id = str(trade['from'])
+
+            requested_cardID = trade['W'][0]
+            given_cardID = trade['H'][0]
+
+            requested_card = trade['W'][1]
+            given_card = trade['H'][1]
+            
+            with open('tradingcards/database.json') as feedsjson:
+                feeds = json.load(feedsjson)
+
+            # TRADER SWAP
+
+            # Delete trader's offered card
+            print(feeds[str(trader_id)][given_cardID]['count'])
+            if feeds[str(trader_id)][given_cardID]['count'] > 1:
+                print("count is greater than 1")
+                feeds[str(trader_id)][given_cardID]['count'] -= 1
+                print("changed to", feeds[str(trader_id)][given_cardID]['count'])
+            else:
+                del feeds[str(trader_id)][given_cardID]
+
+            # If the requested card in not in their binder, add it
+            if requested_cardID not in feeds[trader_id]:
+                feeds[str(trader_id)][requested_cardID] = requested_card
+            # If it already is, just update its count
+            else:
+                feeds[str(trader_id)][requested_cardID]['count'] += 1
+            
+            # TRADEE SWAP
+
+            # Delete tradee's requested card
+            if feeds[str(user_id)][requested_cardID]['count'] > 1:
+                feeds[str(user_id)][requested_cardID]['count'] -= 1
+            else:
+                del feeds[str(user_id)][requested_cardID]
+
+            # If the offered card in not in their binder, add it
+            if given_cardID not in feeds[user_id]:
+                feeds[str(user_id)][given_cardID] = given_card
+            # If it already is, just update its count
+            else:
+                feeds[str(user_id)][given_cardID]['count'] += 1
+            
+            # Delete trade offer
+            del trades[str(user_id)][trade_id]
+
+            # Dump data back to json files
+
+            with open("tradingcards/database.json", "w") as f:
+                json.dump(feeds, f, indent=4)
+
+            with open("tradingcards/trades.json", "w") as f:
+                json.dump(trades, f, indent=4)
+
+            received = f"{trade['H'][1]['user']}{' (HOLO)' if trade['H'][1]['holo'] else ''}"
+
+            file = discord.File(f'tradingcards/generated/{given_cardID}.png')
+            embed = discord.Embed(title="Trade Result", description=f"You've received... \n{received}\nID: {given_cardID}", color=bot_color)
+            embed.set_image(url=f'attachment://{given_cardID}.png')
+
+            await ctx.send(f"Transaction complete!", embed=embed, file=file)
+
+        return
     
 #     # NORMAL COMMAND
 
-#     if len(feeds) >= total_possible_patterns:
-#         await ctx.send(f"All {total_possible_patterns} possible patterns have been discovered!\nThe game has ended.")
-#         return
+    ###################
+    # Checkin process #
+    ###################
 
-#     selection = ''.join([random.choice(list(emoji_list.keys())) for _ in range(9)])
-#     selection_values = [emoji_list[key] for key in selection]
-
-#     textify = "{}\n{}\n{}".format(''.join(selection_values[:3]), ''.join(selection_values[3:6]), ''.join(selection_values[6:]))
-
-#     # Prepare payload
-#     output = {}
-#     output = {'discovered_by': user_id, 'rarity': 100 - (len(feeds) / total_possible_patterns) * 100}
+    checkin_file = 'tradingcards/tc_checkin.json'
     
-#     if selection in feeds:
-#         embed_desc = f"Pattern already discovered by:\n<@{feeds[selection]['discovered_by']}>"
-#     else:
-#         embed_desc = f"New pattern discovered!\nRarity: {'{:.2f}'.format(output['rarity'])}%"
-#         feeds[selection] = output
+    allowed, cooldown = checkin_check(ctx, file=checkin_file, cooldown=tc_cooldown)
+    if not allowed:
+        await ctx.send(f"Please wait `{cooldown}` before pulling for another trading card!")
+        return
+    
+    # Log the check-in time to the json file
+    log_checkin(ctx, file=checkin_file)
 
-#     # Dump check-in data to the json file
-#     with open("lexicon.json", "w") as f:
-#         json.dump(feeds, f)
+    ##############
+    # Process TC #
+    ##############
 
-#     embed = discord.Embed(title="Pattern", description=embed_desc)
-#     embed.add_field(name="", value=textify)
-#     await ctx.send(embed=embed)
+    # Select a random server member
+    server_members = [x for x in ctx.guild.members]
+    member_get = random.choice(server_members)
+    user = member_get
+    
+    # Decide if card is holographic with 0.04 (1 of 25) chance
+    if random.random() <= tc_holo_rarity:
+        holo = True
+    else:
+        holo = False
 
-#     if len(feeds) >= total_possible_patterns:
-#         embed = discord.Embed(title="Leaderboard", description="Top 12 rarest patterns")
-#         sorted_patterns = {key: value for key, value in sorted(feeds.items(), key=lambda x: x[1]['rarity'])[:12]}
-#         for pat, info in sorted_patterns.items():
-#                 result = [emoji_list[letter] for letter in pat]
-#                 textify = "{}\n{}\n{}".format(''.join(result[:3]), ''.join(result[3:6]), ''.join(result[6:]))
-#                 embed.add_field(name=f"ID: {pat}\nRarity: {'{:.2f}'.format(info['rarity'])}%", value=f"Discovered by:\n<@{info['discovered_by']}>\n{textify}")
-#         await ctx.send(f"# All **__{total_possible_patterns}__** possible patterns have been discovered!\nCongratulations to all participent, the research is complete.", embed=embed)
+    # Generate and save the trading card
+    card, rarity = tc_generator(user, holo=holo)
+
+    ######################
+    # Output to database #
+    ######################
+
+    user_card = str(user.id)+f"{'_holo' if holo else ''}"
+    player = str(ctx.author.id)
+
+    # Load json data
+    with open('tradingcards/database.json') as feedsjson:
+        feeds = json.load(feedsjson)
+    
+    # If the CTX user is not in the database already, add them with empty data
+    if player not in feeds:
+        feeds[player] = {}
+
+    # If the card isn't in the CTX user's database already, add it
+    if user_card not in feeds[player]:
+        feeds[player][user_card] = {
+            'user': bot.get_user(int(user.id)).name,
+            'rarity': rarity,
+            'holo': holo,
+            'count': 1
+        }
+    # If it already is, just update its count
+    else:
+        feeds[player][user_card]['count'] += 1
+
+    # Dump data back to json file
+    with open("tradingcards/database.json", "w") as f:
+        json.dump(feeds, f, indent=4)
+
+    #####################
+    # Discord messaging #
+    #####################
+
+    # Prep and send the embed
+    file = discord.File(f'tradingcards/generated/{card}.png')
+    embed = discord.Embed(title=f"{user.name}{' (HOLO)' if holo else ''}", description=user_card, color=bot_color)
+    embed.set_image(url=f'attachment://{card}.png')
+
+    await ctx.send(embed=embed, file=file)
+
+@bot.command()
+async def tcguide(ctx):
+    embed = discord.Embed(title="Trading Cards Guide", description="`tc` command guide", color=bot_color)
+
+    embed.add_field(
+        name="Basics",
+        value="Issue the command `tc` to claim a trading card featuring a random user from the server. Rarity ranks from Ordinary to Ultra Ultra Rare, based on the user's \"best\" role.",
+        inline=False
+    )
+
+    embed.add_field(
+        name="Rarity Rankings",
+        value="""The possible rarities are as follow, ranking best to worse:
+- Ultra Ultra Rare
+- Ultra Rare
+- Rare
+- Exceptional
+- Uncommon
+- Common
+- Ordinary
+        """,
+        inline=False
+    )
+
+    embed.add_field(
+        name="Holographic Cards",
+        value=f"""
+        Holographic cards are extremely rare cards with an holographic effect applied. Every card that is claimed has a {tc_holo_rarity*100}% (or {Fraction(tc_holo_rarity).limit_denominator()}) chance of being holographic.
+        Any card can be holographic, regardless of rarity.
+        """,
+        inline=False
+    )
+
+    embed.add_field(
+        name="Command arguments",
+        value=f"""All the following arguments can be added after the `tc` command, followed by a space.
+        Example: `{prefixes[0]}tc arguments here`
+- `binder` - *Displays your binder.*
+- `view` `card_id` OR `"card name"` - *Displays the chosen card in an embed.*
+- `offer` `@user` `desired_card_id` `offered_card_id` - *Make a trade offer to `@user`.*
+- `trades` - *View your trade offers.*
+- `accept` `trade_id` - *Accept trade offer with ID `trade_id` (issue `trades` command to view trade IDs)*
+- `reject` `trade_id` - *Reject trade offer with ID `trade_id`.*
+        """,
+        inline=False
+    )
+
+    await ctx.send(embed=embed)
 
 # HELP COMMANDS
 
@@ -1719,7 +2049,10 @@ async def help(ctx, query=None):
          "Lists the titles of available prizes in the slots command prize pool."),
 
         ("poker `@user`",
-         f"Challenges `@user` to a game of Dice Poker. See `pokerguide` (`{prefixes[0]}pokerguide`) for more.")
+         f"Challenges `@user` to a game of Dice Poker. See `pokerguide` (`{prefixes[0]}pokerguide`) for more."),
+
+        ("tc `arguments`",
+         f"No argument: Claims a trading card. Can be issued every 24 hours. See `tcguide` (`{prefixes[0]}tcguide`) for more.")
     ]
 
     mod_commands_list = [
