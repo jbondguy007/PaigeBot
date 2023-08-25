@@ -1493,8 +1493,8 @@ def tc_generator(user, holo=True):
         # base_img = brightness.enhance(1.2)
 
     # Fonts setup
-    font = ImageFont.truetype("arial.ttf", 17)
-    font_small = ImageFont.truetype("arial.ttf", 12)
+    font = ImageFont.truetype("dejavu.ttf", 17)
+    font_small = ImageFont.truetype("dejavu.ttf", 12)
     draw = ImageDraw.Draw(base_img)
     _, _, w, h = draw.textbbox((0, 0), f"{user.name}{' (HOLO)' if holo else ''}", font=font)
 
@@ -1563,7 +1563,7 @@ def binder_generator(user):
         img = Image.open(f'tradingcards/generated/{card}.png').convert('RGBA').resize(size=(xsize, ysize))
 
         # Fonts setup
-        font = ImageFont.truetype("arial.ttf", 40)
+        font = ImageFont.truetype("dejavu.ttf", 40)
         draw = ImageDraw.Draw(img)
         # Card name text
         draw.text((xsize-20, ysize-50), str(info['count']), font=font, fill="white", stroke_width=3, stroke_fill="black", anchor="ra")
