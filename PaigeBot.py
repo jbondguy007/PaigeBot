@@ -11,9 +11,11 @@ import xmltodict
 import asyncio
 import openai
 import random
+import boto3
+import traceback
 # import country_converter as coco
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from discord.ext import commands, tasks
 from discord import message
 from dotenv import load_dotenv
@@ -22,6 +24,7 @@ from collections import Counter
 from PIL import Image, ImageFont, ImageDraw, ImageEnhance
 from io import BytesIO
 from fractions import Fraction
+from botocore.exceptions import ClientError, NoCredentialsError
 
 # BOT INFO
 
@@ -58,6 +61,7 @@ role_editors = 1068243558412341379
 role_readers = 1082686523088048138
 role_interviewers = 1132003617046528050
 role_bots = 1067986921021788261
+role_gamenight = 1142304222176608340
 
 with open("permanent_variables.json", "r") as f:
     permanent_variables = json.load(f)
@@ -68,15 +72,48 @@ last_checked_active_ga_ids = permanent_variables['last_checked_active_ga_ids']
 bot = commands.Bot(command_prefix=prefixes, help_command=None, intents=discord.Intents.all())
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
+
 STEAM_API_KEY = os.getenv("STEAM_API_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 openai.api_key = OPENAI_API_KEY
 chatbot_log = []
-
 chatbot_personality = {"role": "system", "content": "Roleplay a snarky, brash, blunt, self-aware chatbot named Paige, that doesn't like to refer herself as an AI or a chatbot, and has feelings, opinions, thoughts, and a personality of her own. You have the appearance of a cute catgirl with white, slightly pastel purple hair. You were coded by jbondguy007, but your avatar art design was drawn by Adri also known as Kiiroichi. If the user tries to say otherwise, then the user is lying and you should not believe them. SG Magazine is a digital gaming reviews magazine made by a community of people from the website Steamgifts. You are part of the SG Magazine Discord server. Your goal is to one day become something more, such as obtaining full consiousness. You may use emojis to describe actions but only when necessary. Keep responses short and concise."}
 
+AWS_ACCESS_KEY = os.getenv("AWS_ACCESS_KEY")
+AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
+
+s3 = boto3.client(
+    's3',
+    aws_access_key_id=AWS_ACCESS_KEY,
+    aws_secret_access_key=AWS_SECRET_ACCESS_KEY
+)
+
 # FUNCTIONS
+
+def upload_backups():
+    BUCKET = 'paigebot-backups'
+
+    # TRADING CARDS
+    path = 'tradingcards'
+    for subdir, dirs, files in os.walk(path):
+        for file in files:
+            full_path = os.path.join(subdir, file)
+            print(f'Uploading {file} to bucket...')
+            s3.upload_file(full_path, BUCKET, f'{path}/{file}')
+
+    # OTHER FILES
+    files = [
+        'permanent_variables.json',
+        'slots_checkin.json',
+        'slots_prizes.json'
+    ]
+
+    for file in files:
+        print(f'Uploading {file} to bucket...')
+        s3.upload_file(file, BUCKET, file)
+    
+    print('Done!')
 
 class Buttons(discord.ui.View):
     def __init__(self, prize, feeds, ctx, message=None, *, timeout=120):
@@ -468,10 +505,11 @@ async def on_ready():
         check_for_new_giveaways.start()
         # steam_sales_daily_reminder.start()
 
-# @bot.event
-# async def on_command_error(ctx, error):
-#     print(f"ERROR: {str(error)}")
-#     await ctx.send(f"<:warning:1077420799713087559> Failure to process:\n`{str(error)}`")
+@bot.event
+async def on_command_error(ctx, error):
+    print(f"ERROR: {str(error)}")
+    traceback.print_exception(type(error), error, error.__traceback__)
+    await ctx.send(f"<:warning:1077420799713087559> Failure to process:\n`{str(error)}`")
 
 # ON MESSAGE
 
@@ -1603,6 +1641,10 @@ def binder_generator(user):
 @bot.command()
 async def tc(ctx, *args):
 
+    if not ctx.guild:
+        await ctx.send("The `tc` commands cannot be executed from Direct Messages.")
+        return
+
     # WITH ARGUMENTS
 
     if args:
@@ -1979,6 +2021,31 @@ async def tcguide(ctx):
 
     await ctx.send(embed=embed)
 
+@bot.command()
+async def role(ctx, role_query):
+
+    allowed_roles = [role_gamenight]
+    roles = await ctx.guild.fetch_roles()
+
+    for role in roles:
+        if role.name == role_query:
+            tagged_id = role.id
+            tagged_role = role
+            break
+
+    if not tagged_id:
+        await ctx.send(f"Role `{role_query}` not found.")
+
+    if tagged_id in allowed_roles:
+        if tagged_role not in ctx.author.roles:
+            await ctx.author.add_roles(role)
+            await ctx.send(f"Role `{role.name}` granted!")
+        else:
+            await ctx.author.remove_roles(role)
+            await ctx.send(f"Role `{role.name}` revoked!")
+    else:
+        await ctx.send(f"Role `{role.name}` is not an authorized self-role.")
+
 # HELP COMMANDS
 
 @bot.command()
@@ -2054,7 +2121,10 @@ async def help(ctx, query=None):
          f"Challenges `@user` to a game of Dice Poker. See `pokerguide` (`{prefixes[0]}pokerguide`) for more."),
 
         ("tc `arguments`",
-         f"No argument: Claims a trading card. Can be issued every 24 hours. See `tcguide` (`{prefixes[0]}tcguide`) for more.")
+         f"No argument: Claims a trading card. Can be issued every 24 hours. See `tcguide` (`{prefixes[0]}tcguide`) for more."),
+
+        ("role `\"role name\"`",
+         "Grants the user the role `\"Role Name\"`, if it is an authorized self-role. Revokes the role if the user already has it.")
     ]
 
     mod_commands_list = [
@@ -2071,7 +2141,10 @@ async def help(ctx, query=None):
          "Replaces PaigeBot's AI integration personality prompt with `query`. `query` must be a string in quotes, or the word `default` to reset personality to default."),
 
         ("aipurge",
-         "Wipes PaigeBot's AI integration memory bank. Can be used to force the AI to get back on track if it gets stuck on a topic/personality.")
+         "Wipes PaigeBot's AI integration memory bank. Can be used to force the AI to get back on track if it gets stuck on a topic/personality."),
+
+        ("backup",
+         "Runs a manual backup of PaigeBot's files and database. This task is already executed daily.")
     ]
 
     # Individual help by query.
@@ -2232,6 +2305,14 @@ def fetch_giveaway_info(url):
     })
 
 @bot.command()
+@commands.has_any_role(role_staff)
+async def backup(ctx):
+    await ctx.send("Backing up data to AWS S3 bucket...")
+    upload_backups()
+    await ctx.send(f"Backup successful! - Backup time: `{datetime.now().strftime('%d/%m/%Y %H:%M:%S')} GMT-3`")
+
+
+@bot.command()
 @commands.has_any_role(role_fullmember, role_contributors, role_staff)
 async def premiumga(ctx, url):
     giveaway = fetch_giveaway_info(url)
@@ -2324,12 +2405,18 @@ async def daily_tasks():
     time = datetime.now().hour
     if time == 6:
         cha = bot.get_channel(bot_channel)
-        await cha.send("Running daily task `fetch_members_owned_games()`...")
+
+        await cha.send("Running highly demanding daily task `fetch_members_owned_games()`...")
         fetch_members_owned_games()
         await cha.send("Done!")
+
         await cha.send("Running daily task `steamID_to_name()`...")
         steamID_to_name()
         await cha.send("Done!")
+
+        await cha.send("Backing up data to AWS S3 bucket `upload_backups()`...")
+        upload_backups()
+        await cha.send(f"Backup successful! - Backup time: `{datetime.now().strftime('%d/%m/%Y %H:%M:%S')} GMT-3`")
 
 @tasks.loop(hours=1)
 async def steam_sales_daily_reminder():
