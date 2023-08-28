@@ -63,7 +63,7 @@ role_interviewers = 1132003617046528050
 role_bots = 1067986921021788261
 role_gamenight = 1142304222176608340
 
-# IF TESTING: Set to arial.ttf
+# TODO IF TESTING: Set to arial.ttf
 
 chosen_font = "DejaVuSans.ttf"
 # chosen_font = "arial.ttf"
@@ -1743,6 +1743,26 @@ async def tc(ctx, *args):
                     return
             
             await ctx.send(f"Card `{queried_card}` not found in your binder! Are you sure you own it?")
+
+        elif args[0].lower() == 'quickview':
+
+            try:
+                queried_card = args[1]
+            except:
+                await ctx.send(f"Command is `{prefixes[0]}tc quickview card-ID-here`")
+                return
+
+            # Prep and send the embed
+            try:
+                file = discord.File(f'tradingcards/generated/{queried_card}.png')
+            except:
+                await ctx.send(f"Unable to locate card `{queried_card}` as it doesn't exist, or has not been discovered yet.")
+                return
+            
+            embed = discord.Embed(title="Quick View", description=queried_card, color=bot_color)
+            embed.set_image(url=f'attachment://{queried_card}.png')
+
+            await ctx.send(embed=embed, file=file)
         
         elif args[0].lower() == 'offer':
 
@@ -1936,34 +1956,31 @@ async def tc(ctx, *args):
         elif args[0].lower() == 'rebuild':
 
             if len(args) < 2:
-                await ctx.send("Command requires a userID argument.")
+                await ctx.send("Command requires userID argument(s).")
                 return
 
             if not any(role.id in [role_staff, role_officers, 630835784274018347] for role in ctx.author.roles):
                 await ctx.send("Command only authorized for users with staff or officer roles.")
                 return
 
-            usr = ctx.guild.get_member(int(args[1]))
-            if not usr:
-                await ctx.send(f"No user with ID `{args[1]}` found!")
-                return
+            users = []
+            for arg in args[1:]:
+                users.append( (arg, ctx.guild.get_member(int(arg))) )
 
-            if len(args) > 2:
-                is_holo = args[2]
-                if is_holo != "holo":
-                    await ctx.send(f"Unexpected argument `{args[2]}` - Did you mean `holo`?")
-                    return
-            else:
-                is_holo = False
+            successes = 0
+            failure = []
+            for arg, user in users:
+                await ctx.send(f"Regenerating `{arg}` user card...")
+                try:
+                    card, rarity = tc_generator(user, holo=False)
+                    successes += 1
+                    await ctx.send(f"Success.")
+                except:
+                    await ctx.send(f"Failed.")
+                    failure.append(arg)
             
-            await ctx.send("Regenerating user card...")
-
-            card, rarity = tc_generator(usr, holo=is_holo)
-
-            file = discord.File(f'tradingcards/generated/{card}.png')
-            embed = discord.Embed(title=f"Regenerated {card}", color=bot_color)
-            embed.set_image(url=f'attachment://{card}.png')
-            await ctx.send("Card regenerated!", embed=embed, file=file)
+            failed = '\n'.join('`{}`'.format(x) for x in failure) if failure else 'No failure.'
+            await ctx.send(f"Successfully rebuilt: `{successes}/{len(args[1:])}`\n\nFailure:\n{failed}")
 
         return
     
@@ -2082,7 +2099,8 @@ async def tcguide(ctx):
         Example: `{prefixes[0]}tc arguments here`
 - `binder` - *Displays your binder.*
 - `list` `username` - *Lists all owned cards and IDs. If `username` is provided, displays that user's list instead.
-- `view` `card_id` OR `"card name"` - *Displays the chosen card in an embed.*
+- `view` `card_id` OR `"card name"` - *Displays the chosen card (if the user owns it) in an embed.*
+- `quickview` `card_id` - *Displays the card in an embed, if it exists. User does not need to own the card to view it in quickview.*
 - `offer` `@user` `offered_card_id` `desired_card_id` - *Make a trade offer to `@user`.*
 - `trades` - *View your trade offers.*
 - `accept` `trade_id` - *Accept trade offer with ID `trade_id` (issue `trades` command to view trade IDs)*
