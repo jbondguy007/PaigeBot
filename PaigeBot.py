@@ -2216,7 +2216,10 @@ async def help(ctx, query=None):
          f"No argument: Claims a trading card. Can be issued every 24 hours. See `tcguide` (`{prefixes[0]}tcguide`) for more."),
 
         ("role `\"role name\"`",
-         "Grants the user the role `\"Role Name\"`, if it is an authorized self-role. Revokes the role if the user already has it.")
+         "Grants the user the role `\"Role Name\"`, if it is an authorized self-role. Revokes the role if the user already has it."),
+
+        ("bug `message`",
+         f"Logs a bug report. Please include details as `message` - example: `{prefixes[0]}bug The trading card guide has a typo in the rarity sections.`")
     ]
 
     mod_commands_list = [
@@ -2236,7 +2239,10 @@ async def help(ctx, query=None):
          "Wipes PaigeBot's AI integration memory bank. Can be used to force the AI to get back on track if it gets stuck on a topic/personality."),
 
         ("backup",
-         "Runs a manual backup of PaigeBot's files and database. This task is already executed daily.")
+         "Runs a manual backup of PaigeBot's files and database. This task is already executed daily."),
+
+        ("buglog `clear reportID`",
+         "Displays all pending bug reports. If `clear reportID` is provided, clears report with id `reportID` from the bug log.")
     ]
 
     # Individual help by query.
