@@ -63,6 +63,11 @@ role_interviewers = 1132003617046528050
 role_bots = 1067986921021788261
 role_gamenight = 1142304222176608340
 
+# IF TESTING: Set to arial.ttf
+
+chosen_font = "DejaVuSans.ttf"
+# chosen_font = "arial.ttf"
+
 with open("permanent_variables.json", "r") as f:
     permanent_variables = json.load(f)
 steamgifts_threads = permanent_variables['thread_links']
@@ -487,6 +492,13 @@ def chatbot(query, nickname):
         return response
 
     except Exception as e: return(e)
+
+def get_user_from_username(username):
+    for guild in bot.guilds:
+        for member in guild.members:
+            if member.name == username:
+                return member
+    return False
 
 # BOT EVENTS
 
@@ -1464,38 +1476,24 @@ async def pokerguide(ctx):
     await ctx.send(embed=embed)
 
 def tc_role(user):
-    roles = [role for role in user.roles]
-    roles.reverse()
+    tc_rarities_dict = {
+        "Ultra Ultra Rare": [role_founders, role_bots],
+        "Ultra Rare": [role_staff, role_officers],
+        "Rare": [role_editors, role_interviewers],
+        "Exceptional": [role_premiumreviewer, role_contributors],
+        "Uncommon": [role_fullmember],
+        "Common": [role_reviewer]
+    }
 
-    # Rarity by role
-    for role in roles:
+    user_roles = [role for role in user.roles]
 
-        if role.id in [role_founders, role_bots]:
-            rarity = "Ultra Ultra Rare"
-            return (rarity, role)
-        
-        elif role.id in [role_staff, role_officers]:
-            rarity = "Ultra Rare"
-            return (rarity, role)
-        
-        elif role.id in [role_editors, role_interviewers]:
-            rarity = "Rare"
-            return (rarity, role)
-        
-        elif role.id in [role_premiumreviewer, role_contributors]:
-            rarity = "Exceptional"
-            return (rarity, role)
-        
-        elif role.id == role_fullmember:
-            rarity = "Uncommon"
-            return (rarity, role)
-        
-        elif role.id == role_reviewer:
-            rarity = "Common"
-            return (rarity, role)
-        
-    rarity = "Ordinary"
-    return (rarity, role)
+    for rarity_name, list_of_role_ids in tc_rarities_dict.items():
+        for user_role in user_roles:
+            if user_role.id in list_of_role_ids:
+                return(rarity_name, user_role)
+            
+    else:
+        return("Ordinary", user_role)
 
 def tc_generator(user, holo=True):
     pfp = user.avatar
@@ -1531,10 +1529,8 @@ def tc_generator(user, holo=True):
         # base_img = brightness.enhance(1.2)
 
     # Fonts setup
-
-    # IF TESTING: Set to arial.ttf
-    font = ImageFont.truetype("DejaVuSans.ttf", 17)
-    font_small = ImageFont.truetype("DejaVuSans.ttf", 12)
+    font = ImageFont.truetype(chosen_font, 17)
+    font_small = ImageFont.truetype(chosen_font, 12)
     draw = ImageDraw.Draw(base_img)
     _, _, w, h = draw.textbbox((0, 0), f"{user.name}{' (HOLO)' if holo else ''}", font=font)
 
@@ -1552,13 +1548,7 @@ def tc_generator(user, holo=True):
     base_img.save(f'tradingcards/generated/{card}.png')
     return (card, rarity)
 
-def binder_generator(user):
-    # Load json data
-    with open('tradingcards/database.json') as feedsjson:
-        feeds = json.load(feedsjson)
-
-    player_collection_unsorted = feeds[str(user)]
-
+def tc_sorter(cards):
     # Define the rarity order
     rarity_order = {
         "Ultra Ultra Rare": 1,
@@ -1578,8 +1568,19 @@ def binder_generator(user):
 
     # Sort the dictionary using the custom sorting key
     player_collection = {
-        k: v for k, v in sorted(player_collection_unsorted.items(), key=sorting_key)
+        k: v for k, v in sorted(cards.items(), key=sorting_key)
     }
+
+    return player_collection
+
+def binder_generator(user):
+    # Load json data
+    with open('tradingcards/database.json') as feedsjson:
+        feeds = json.load(feedsjson)
+
+    player_collection_unsorted = feeds[str(user)]
+
+    player_collection = tc_sorter(player_collection_unsorted)
 
     x = 0
     y = 0
@@ -1603,7 +1604,7 @@ def binder_generator(user):
         img = Image.open(f'tradingcards/generated/{card}.png').convert('RGBA').resize(size=(xsize, ysize))
 
         # Fonts setup
-        font = ImageFont.truetype("DejaVuSans.ttf", 40)
+        font = ImageFont.truetype(chosen_font, 40)
         draw = ImageDraw.Draw(img)
         # Card name text
         draw.text((xsize-20, ysize-50), str(info['count']), font=font, fill="white", stroke_width=3, stroke_fill="black", anchor="ra")
@@ -1668,6 +1669,43 @@ async def tc(ctx, *args):
                 embed.set_image(url=f'attachment://{binder}.png')
                     
                 await ctx.send(embed=embed, file=file)
+        
+        elif args[0].lower() == 'list':
+            
+            if len(args) > 1:
+                try:
+                    user = get_user_from_username(args[1])
+                except:
+                    await ctx.send("User not found in database!")
+                    return
+            
+            else:
+                user = ctx.author
+
+            if not str(user.id) in feeds:
+                await ctx.send(f"No cards found for {user.name}! Try claiming some with `{prefixes[0]}tc` first!")
+                return
+
+            player_collection = tc_sorter(feeds[str(user.id)])
+            keys = list(player_collection.keys())
+
+            batch_size = 25
+            collection_size = len(keys)
+
+            for i in range(0, collection_size, batch_size):
+                embed = discord.Embed(title=f"{user.name}'s Cards List", color=bot_color)
+
+                batch_keys = keys[i:i + batch_size]
+                batch_dict = {key: player_collection[key] for key in batch_keys}
+
+                for cardID, card in batch_dict.items():
+                    embed.add_field(
+                        name=f"{card['user']}{' (HOLO)' if card['holo'] else ''}",
+                        value=f"{cardID}\nCount: {card['count']}",
+                        inline=True
+                    )
+                
+                await ctx.send(embed=embed)
 
         elif args[0].lower() == 'view':
 
@@ -1689,7 +1727,8 @@ async def tc(ctx, *args):
                         card_check = feeds[str(ctx.author.id)][queried_card]
                         card_id = queried_card
                     except:
-                        pass
+                        await ctx.send(f"Unable to locate card `{queried_card}` as it doesn't exist, or has not been discovered yet.")
+                        return
                 
                 if card_id:
 
@@ -1893,6 +1932,38 @@ async def tc(ctx, *args):
             embed.set_image(url=f'attachment://{given_cardID}.png')
 
             await ctx.send(f"Transaction complete!", embed=embed, file=file)
+        
+        elif args[0].lower() == 'rebuild':
+
+            if len(args) < 2:
+                await ctx.send("Command requires a userID argument.")
+                return
+
+            if not any(role.id in [role_staff, role_officers, 630835784274018347] for role in ctx.author.roles):
+                await ctx.send("Command only authorized for users with staff or officer roles.")
+                return
+
+            usr = ctx.guild.get_member(int(args[1]))
+            if not usr:
+                await ctx.send(f"No user with ID `{args[1]}` found!")
+                return
+
+            if len(args) > 2:
+                is_holo = args[2]
+                if is_holo != "holo":
+                    await ctx.send(f"Unexpected argument `{args[2]}` - Did you mean `holo`?")
+                    return
+            else:
+                is_holo = False
+            
+            await ctx.send("Regenerating user card...")
+
+            card, rarity = tc_generator(usr, holo=is_holo)
+
+            file = discord.File(f'tradingcards/generated/{card}.png')
+            embed = discord.Embed(title=f"Regenerated {card}", color=bot_color)
+            embed.set_image(url=f'attachment://{card}.png')
+            await ctx.send("Card regenerated!", embed=embed, file=file)
 
         return
     
@@ -2010,11 +2081,14 @@ async def tcguide(ctx):
         value=f"""All the following arguments can be added after the `tc` command, followed by a space.
         Example: `{prefixes[0]}tc arguments here`
 - `binder` - *Displays your binder.*
+- `list` `username` - *Lists all owned cards and IDs. If `username` is provided, displays that user's list instead.
 - `view` `card_id` OR `"card name"` - *Displays the chosen card in an embed.*
-- `offer` `@user` `desired_card_id` `offered_card_id` - *Make a trade offer to `@user`.*
+- `offer` `@user` `offered_card_id` `desired_card_id` - *Make a trade offer to `@user`.*
 - `trades` - *View your trade offers.*
 - `accept` `trade_id` - *Accept trade offer with ID `trade_id` (issue `trades` command to view trade IDs)*
 - `reject` `trade_id` - *Reject trade offer with ID `trade_id`.*
+
+- `rebuild` `userID` `"holo"` - *STAFF/OFFICERS ONLY - Manually regenerates a card for `userID`. Regenerates the holo counterpart if `holo` is included.*
         """,
         inline=False
     )
