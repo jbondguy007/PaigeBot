@@ -515,7 +515,7 @@ async def on_ready():
     if not bot.user.id == 823385752486412290:
         daily_tasks.start()
         check_for_new_giveaways.start()
-        # steam_sales_daily_reminder.start()
+        steam_sales_daily_reminder.start()
 
 @bot.event
 async def on_command_error(ctx, error):
@@ -2120,6 +2120,24 @@ async def role(ctx, role_query):
     else:
         await ctx.send(f"Role `{role.name}` is not an authorized self-role.")
 
+@bot.command()
+async def bug(ctx, *report):
+    report = ' '.join(report)
+
+    with open('bug_reports.json') as feedsjson:
+        file = json.load(feedsjson)
+    
+    file[ctx.message.id] = {
+        'reporter': ctx.author.name,
+        'message_link': f'https://discord.com/channels/{ctx.guild.id}/{ctx.channel.id}/{ctx.message.id}',
+        'report': report
+    }
+
+    with open("bug_reports.json", "w") as f:
+        json.dump(file, f, indent=4)
+    
+    await ctx.send("Bug report logged! Thanks for your support!")
+
 # HELP COMMANDS
 
 @bot.command()
@@ -2406,6 +2424,49 @@ async def premiumga(ctx, url):
     await channel.send(embed=embed)
     await ctx.send("Premium giveaway announced!")
 
+@bot.command()
+@commands.has_any_role(role_staff)
+async def buglog(ctx, *args):
+
+    with open('bug_reports.json') as feedsjson:
+        file = json.load(feedsjson)
+
+    if args:
+        if args[0].lower() == 'clear':
+            if len(args) < 2:
+                await ctx.send("Clear command requires `reportID` argument.")
+                return
+            try:
+                del file[args[1]]
+                with open("bug_reports.json", "w") as f:
+                    json.dump(file, f, indent=4)
+                await ctx.send(f"Cleared bug report `{args[1]}`.")
+                return
+            except:
+                await ctx.send(f"Error attempting to clear bug report `{args[1]}`.")
+                return
+        else:
+            await ctx.send(f"Unrecognized command argument `{args[0]}`.")
+            return
+    
+    embed = discord.Embed(title="Bug Reports Log")
+
+    for report_ID, report in file.items():
+        embed.add_field(
+            name=f"Report ID: {report_ID}\nReporter: {report['reporter']}\nReport Link: {report['message_link']}",
+            value=report['report'],
+            inline=False
+        )
+    
+    if len(file) == 0:
+        embed.add_field(
+            name="No bug reports pending!",
+            value="",
+            inline=False
+        )
+    
+    await ctx.send(embed=embed)
+
 # TASKS
 
 @tasks.loop(minutes=30)
@@ -2497,6 +2558,6 @@ async def steam_sales_daily_reminder():
     time = datetime.now().hour
     if time == 14:
         cha = bot.get_channel(general_channel)
-        await cha.send("Remember to get your daily animated avatar: <https://store.steampowered.com/category/visual_novel>")
+        await cha.send("Remember to get your free daily sticker: <https://store.steampowered.com/category/strategy>")
 
 bot.run(TOKEN)
