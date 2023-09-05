@@ -515,7 +515,7 @@ async def on_ready():
     if not bot.user.id == 823385752486412290:
         daily_tasks.start()
         check_for_new_giveaways.start()
-        steam_sales_daily_reminder.start()
+        # steam_sales_daily_reminder.start()
 
 @bot.event
 async def on_command_error(ctx, error):
