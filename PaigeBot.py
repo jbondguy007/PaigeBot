@@ -1814,7 +1814,7 @@ async def tc(ctx, *args):
                 cardID = userID+('_holo' if is_holo else '')
                 card = all_cards[cardID]
             except:
-                await ctx.send(f"Unable to locate card `{queried_card}` as it does not exist in the database, possibly because it has not yet been discovered by anyone yet.")
+                await ctx.send(f"Unable to locate card `{args[1]}` as it does not exist in the database, possibly because it has not yet been discovered by anyone yet.")
                 return
 
             # Prep and send the embed
@@ -2029,8 +2029,8 @@ async def tc(ctx, *args):
             await ctx.send(f"Successfully rebuilt: `{successes}/{len(args[1:])}`\n\nFailure(s):\n{failed}")
         
         elif args[0].lower() == 'full_rebuild':
-            if not any(role.id in [role_staff, role_officers, 630835784274018347] for role in ctx.author.roles):
-                await ctx.send("Command only authorized for users with staff or officer roles.")
+            if not ctx.author.id == 172522306147581952:
+                await ctx.send("Command only authorized to botmaster (jbondguy007).")
                 return
             
             await ctx.send("This will rebuild the entire database and all cards, and is intended for extreme situations only. Continue anyways? [Y]")
@@ -2175,25 +2175,65 @@ async def tcguide(ctx):
         inline=False
     )
 
-    embed.add_field(
-        name="Command arguments",
-        value=f"""All the following arguments can be added after the `tc` command, followed by a space.
-        Example: `{prefixes[0]}tc arguments here`
-- `binder` - *Displays your binder.*
-- `list` `username` - *Lists all owned cards with details. If `username` is provided, displays that user's list instead.
-- `view` `card_id` OR `"card name"` - *Displays the chosen card in an embed, if it exists in the database (has been discovered by a member already).*
-- `offer` `@user` `offered_card_id` `desired_card_id` - *Make a trade offer to `@user`.*
-- `trades` - *View your trade offers.*
-- `accept` `trade_id` - *Accept trade offer with ID `trade_id` (issue `trades` command to view trade IDs)*
-- `reject` `trade_id` - *Reject trade offer with ID `trade_id`.*
+    await ctx.send(embed=embed)
 
-- `rebuild` `LIST-of-IDs` - *STAFF/OFFICERS ONLY - Manually regenerates cards. Takes a single card ID, or multiple separated each by a space. Also rebuilds holo cards by appending `_holo` at the end of a card ID.*
-- `full_rebuild` - *STAFF/OFFICERS ONLY - Manually regenerates ALL binders, database and cards. Very intensive command, only use as last resort!*
-        """,
+    embed2 = discord.Embed(title="Trading Cards Guide (Command Arguments)", description=f"All the following arguments can be added after the `tc` command, followed by a space.\nExample: `{prefixes[0]}tc arguments here`", color=bot_color)
+
+    embed2.add_field(
+        name="binder",
+        value=f"*Displays your binder.*",
         inline=False
     )
 
-    await ctx.send(embed=embed)
+    embed2.add_field(
+        name="list username",
+        value=f"*Lists all owned cards with details. If username is provided, displays that user's list instead.*",
+        inline=False
+    )
+
+    embed2.add_field(
+        name="view card_id OR \"card name\"",
+        value=f"*Displays the chosen card in an embed, if it exists in the database (has been discovered by a member already).*",
+        inline=False
+    )
+
+    embed2.add_field(
+        name="offer @user offered_card_id desired_card_id",
+        value=f"*Make a trade offer to @user.*",
+        inline=False
+    )
+
+    embed2.add_field(
+        name="trades",
+        value=f"*View your trade offers.*",
+        inline=False
+    )
+
+    embed2.add_field(
+        name="accept trade_id",
+        value=f"*Accept trade offer with ID trade_id (issue trades command to view trade IDs)*",
+        inline=False
+    )
+
+    embed2.add_field(
+        name="reject trade_id",
+        value=f"*Reject trade offer with ID trade_id.*",
+        inline=False
+    )
+
+    embed2.add_field(
+        name="rebuild LIST-of-IDs",
+        value=f"*STAFF/OFFICERS ONLY - Manually regenerates cards. Takes a single card ID, or multiple separated each by a space. Also rebuilds holo cards by appending _holo at the end of a card ID.*",
+        inline=False
+    )
+
+    embed2.add_field(
+        name="full_rebuild",
+        value=f"*JBONDGUY007 ONLY - Manually regenerates ALL binders, database and cards. Very intensive command, only use as last resort!*",
+        inline=False
+)
+
+    await ctx.send(embed=embed2)
 
 @bot.command()
 async def role(ctx, role_query):
