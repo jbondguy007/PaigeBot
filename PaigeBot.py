@@ -36,7 +36,7 @@ bot_platform = [platform.system(), platform.release(), platform.python_version()
 # VARIABLES
 
 slots_cooldown = timedelta(hours=6)
-tc_cooldown = timedelta(hours=24)
+tc_cooldown = timedelta(hours=8)
 tc_holo_rarity = 0.04
 
 bot_color = 0x9887ff
@@ -1496,6 +1496,7 @@ def tc_role(user):
         return("Ordinary", user_role)
 
 def tc_generator(user, holo=True):
+    print(f"Generating card {user}...")
     pfp = user.avatar
     rarity, role = tc_role(user)
     user_join_date = user.joined_at.strftime("%m/%d/%Y")
@@ -1546,7 +1547,24 @@ def tc_generator(user, holo=True):
     # Save the resulting image
     card = f"{user.id}{'_holo' if holo else ''}"
     base_img.save(f'tradingcards/generated/{card}.png')
-    return (card, rarity)
+
+    # Create/update the card in the master file
+
+    with open('tradingcards/cards.json') as feedsjson:
+        cards_file = json.load(feedsjson)
+    
+        cards_file[card] = {
+            'name': bot.get_user(int(user.id)).name,
+            'rarity': rarity,
+            'holo': holo
+        }
+    
+    with open("tradingcards/cards.json", "w") as f:
+        json.dump(cards_file, f, indent=4)
+
+    print("Done!")
+
+    return card
 
 def tc_sorter(cards):
     # Define the rarity order
@@ -1573,14 +1591,31 @@ def tc_sorter(cards):
 
     return player_collection
 
-def binder_generator(user):
+def fetch_player_collection(user):
     # Load json data
     with open('tradingcards/database.json') as feedsjson:
-        feeds = json.load(feedsjson)
+        database = json.load(feedsjson)
+    
+    with open('tradingcards/cards.json') as feedsjson:
+        all_cards = json.load(feedsjson)
 
-    player_collection_unsorted = feeds[str(user)]
+    player_collection_ids = database[str(user)]
+
+    player_collection_unsorted = {}
+
+    for key in player_collection_ids.keys():
+        if key in all_cards:
+            player_collection_unsorted[key] = {**all_cards[key], **player_collection_ids[key]}
+        else:
+            player_collection_unsorted[key] = player_collection_ids[key]
 
     player_collection = tc_sorter(player_collection_unsorted)
+    
+    return player_collection
+
+def binder_generator(user):
+
+    player_collection = fetch_player_collection(user)
 
     x = 0
     y = 0
@@ -1639,6 +1674,53 @@ def binder_generator(user):
 
     return returned_value
 
+def tc_add(user_ID, card_ID):
+
+    player = str(user_ID)
+
+    with open('tradingcards/database.json') as feedsjson:
+        database = json.load(feedsjson)
+
+    if player not in database:
+        database[player] = {}
+
+    # If the card isn't in the CTX user's database already, add it
+    if card_ID not in database[player]:
+        database[player][card_ID] = {
+            'count': 1
+        }
+    # If it already is, just update its count
+    else:
+        database[player][card_ID]['count'] += 1
+
+    # Dump data back to json file
+    with open("tradingcards/database.json", "w") as f:
+        json.dump(database, f, indent=4)
+
+def tc_remove(user_ID, card_ID):
+
+    player = str(user_ID)
+
+    with open('tradingcards/database.json') as feedsjson:
+        database = json.load(feedsjson)
+
+    if player not in database:
+        return "NoPlayer"
+
+    # If only a single instance of the card is in the CTX user's database, remove it
+    try:
+        if database[player][card_ID]['count'] == 1:
+            del database[player][card_ID]
+        # If there are multiple instances, just update its count
+        else:
+            database[player][card_ID]['count'] -= 1
+    except:
+        return "NoCard"
+
+    # Dump data back to json file
+    with open("tradingcards/database.json", "w") as f:
+        json.dump(database, f, indent=4)
+
 @bot.command()
 async def tc(ctx, *args):
 
@@ -1652,7 +1734,9 @@ async def tc(ctx, *args):
 
         # Load json data
         with open('tradingcards/database.json') as feedsjson:
-            feeds = json.load(feedsjson)
+            database = json.load(feedsjson)
+        with open('tradingcards/cards.json') as feedsjson:
+            all_cards = json.load(feedsjson)
 
         if args[0].lower() == 'binder':
 
@@ -1682,11 +1766,11 @@ async def tc(ctx, *args):
             else:
                 user = ctx.author
 
-            if not str(user.id) in feeds:
+            if not str(user.id) in database:
                 await ctx.send(f"No cards found for {user.name}! Try claiming some with `{prefixes[0]}tc` first!")
                 return
 
-            player_collection = tc_sorter(feeds[str(user.id)])
+            player_collection = fetch_player_collection(str(user.id))
             keys = list(player_collection.keys())
 
             batch_size = 25
@@ -1700,8 +1784,8 @@ async def tc(ctx, *args):
 
                 for cardID, card in batch_dict.items():
                     embed.add_field(
-                        name=f"{card['user']}{' (HOLO)' if card['holo'] else ''}",
-                        value=f"{cardID}\nCount: {card['count']}",
+                        name=f"{card['name']}{' (HOLO)' if card['holo'] else ''}",
+                        value=f"{cardID}\n{card['rarity']}\nCount: {card['count']}",
                         inline=True
                     )
                 
@@ -1715,54 +1799,31 @@ async def tc(ctx, *args):
                 await ctx.send(f"Command is `{prefixes[0]}tc view card-ID-here`")
                 return
             
-            if str(ctx.author.id) in feeds:
-
-                for cardID, card in feeds[str(ctx.author.id)].items():
-                    if f"{card['user']}{' (HOLO)' if card['holo'] else ''}" == queried_card:
-                        card_id = cardID
-                        break
-                
-                else:
-                    try:
-                        card_check = feeds[str(ctx.author.id)][queried_card]
-                        card_id = queried_card
-                    except:
-                        await ctx.send(f"Unable to locate card `{queried_card}` as it doesn't exist, or has not been discovered yet.")
-                        return
-                
-                if card_id:
-
-                    card = feeds[str(ctx.author.id)][card_id]
-
-                    # Prep and send the embed
-                    file = discord.File(f'tradingcards/generated/{card_id}.png')
-                    embed = discord.Embed(title=f"{ctx.author.name}'s \"{card['user']}{' (HOLO)' if card['holo'] else ''}\"", description=f"{card_id}", color=bot_color)
-                    embed.set_image(url=f'attachment://{card_id}.png')
-
-                    await ctx.send(embed=embed, file=file)
-                    return
-            
-            await ctx.send(f"Card `{queried_card}` not found in your binder! Are you sure you own it?")
-
-        elif args[0].lower() == 'quickview':
+            is_holo = False
+            if queried_card.endswith(' (HOLO)'):
+                queried_card = queried_card.replace(' (HOLO)', '')
+                is_holo = True
 
             try:
-                queried_card = args[1]
+                user = get_user_from_username(queried_card)
+                userID = str(user.id)
             except:
-                await ctx.send(f"Command is `{prefixes[0]}tc quickview card-ID-here`")
+                userID = queried_card
+            
+            try:
+                cardID = userID+('_holo' if is_holo else '')
+                card = all_cards[cardID]
+            except:
+                await ctx.send(f"Unable to locate card `{queried_card}` as it does not exist in the database, possibly because it has not yet been discovered by anyone yet.")
                 return
 
             # Prep and send the embed
-            try:
-                file = discord.File(f'tradingcards/generated/{queried_card}.png')
-            except:
-                await ctx.send(f"Unable to locate card `{queried_card}` as it doesn't exist, or has not been discovered yet.")
-                return
-            
-            embed = discord.Embed(title="Quick View", description=queried_card, color=bot_color)
-            embed.set_image(url=f'attachment://{queried_card}.png')
+            file = discord.File(f"tradingcards/generated/{cardID}.png")
+            embed = discord.Embed(title=f"{card['name']}{' (HOLO)' if card['holo'] else ''}", description=f"ID: {cardID}", color=bot_color)
+            embed.set_image(url=f"attachment://{cardID}.png")
 
             await ctx.send(embed=embed, file=file)
+            return
         
         elif args[0].lower() == 'offer':
 
@@ -1773,62 +1834,63 @@ async def tc(ctx, *args):
                 return
             
             try:
-                give = args[2]
-                take = args[3]
-                user_name = user.name
-
-                if user.id == ctx.author.id:
-                    await ctx.send(f"Cannot send trades to self.")
-                    return
-
-                try:
-                    if feeds[str(ctx.author.id)][give]:
-                        pass
-                except:
-                    await ctx.send(f"`{give}` not found in {ctx.author.name}'s binder!")
-                    return
-
-                try:
-                    if feeds[str(user.id)][take]:
-                        pass
-                except:
-                    await ctx.send(f"`{take}` not found in {user_name}'s binder!")
-                    return
-                
-                with open('tradingcards/trades.json') as feedsjson:
-                    trades = json.load(feedsjson)
-
-                if str(user.id) not in trades:
-                    trades[str(user.id)] = {}
-
-                trades[str(user.id)][str(ctx.message.id)] = {
-                    "from": ctx.author.id,
-                    "H": (
-                        give,
-                        feeds[str(ctx.author.id)][give]
-                    ),
-                    "W": (
-                        take,
-                        feeds[str(user.id)][take]
-                    )
-                }
-
-                with open("tradingcards/trades.json", "w") as f:
-                    json.dump(trades, f, indent=4)
-
-                given = feeds[str(ctx.author.id)][give]
-                taken = feeds[str(user.id)][take]
-                await ctx.send(f"Offered a trade to {user_name} - [H] `{given['user']}{' (HOLO)' if given['holo'] else ''}` [W] `{taken['user']}{' (HOLO)' if taken['holo'] else ''}` (trade ID: {ctx.message.id})")
-
+                have = args[2]
+                want = args[3]
             except:
                 await ctx.send("There was an issue submitting the trade. Make sure you have the correct userID!")
+                return
+            
+            user_name = user.name
+
+            # Check against self-trade
+            if user.id == ctx.author.id:
+                await ctx.send(f"Cannot send trades to self.")
+                return
+
+            # Check that trader has the traded card
+            try:
+                if database[str(ctx.author.id)][have]:
+                    pass
+            except:
+                await ctx.send(f"`{have}` not found in {ctx.author.name}'s binder!")
+                return
+
+            # Check that tradee has the traded card
+            try:
+                if database[str(user.id)][want]:
+                    pass
+            except:
+                await ctx.send(f"`{want}` not found in {user_name}'s binder!")
+                return
+            
+            with open('tradingcards/trades.json') as feedsjson:
+                trades = json.load(feedsjson)
+
+            # Check if the user exists in the trades file.
+            # If not, add them.
+            if str(user.id) not in trades:
+                trades[str(user.id)] = {}
+
+            # Initiate trade dictionary
+            trades[str(user.id)][str(ctx.message.id)] = {
+                "from": ctx.author.id,
+                "have": have,
+                "want": want
+            }
+
+            with open("tradingcards/trades.json", "w") as f:
+                json.dump(trades, f, indent=4)
+
+            offered = all_cards[have]
+            requested = all_cards[want]
+            await ctx.send(f"Offered a trade to {user_name} - [H] `{offered['name']}{' (HOLO)' if offered['holo'] else ''}` [W] `{requested['name']}{' (HOLO)' if requested['holo'] else ''}` (trade ID: {ctx.message.id})")
         
         elif args[0].lower() == 'trades':
             with open('tradingcards/trades.json') as feedsjson:
                 trades = json.load(feedsjson)
             
             with open('tradingcards/database.json') as feedsjson:
-                feeds = json.load(feedsjson)
+                database = json.load(feedsjson)
 
             try:
                 trades = trades[str(ctx.author.id)]
@@ -1847,24 +1909,27 @@ async def tc(ctx, *args):
                 trader = details['from']
                 user = ctx.author.id
 
-                given_card = details['H']
-                requested_card = details['W']
+                given_card_ID = details['have']
+                requested_card_ID = details['want']
 
+                given_card = all_cards[str(given_card_ID)]
+                requested_card = all_cards[str(requested_card_ID)]
+
+                # Check if the trader's card is still available for trading
                 try:
-                    receive = feeds[str(trader)][given_card[0]]
+                    receive = database[str(trader)][given_card_ID]
                 except:
                     continue
-                    # await ctx.send(f"{bot.get_user(trader).name} no longer has {given_card[1]['user']}{' (HOLO)' if given_card[1]['holo'] else ''} in their binder!")
-                    # return
 
+                # Check if the tradee's card is still available for trading
                 try:
-                    deliver = feeds[str(user)][requested_card[0]]
+                    deliver = database[str(user)][requested_card_ID]
                 except:
                     continue
 
                 embed.add_field(
                     name=f"Trade ID: {tradeID}",
-                    value=f"From: <@{trader}>\n[H]: {receive['user']}{' (HOLO)' if receive['holo'] else ''}\n[W]: {deliver['user']}{' (HOLO)' if deliver['holo'] else ''}",
+                    value=f"From: <@{trader}>\n[H]: {given_card['name']}{' (HOLO)' if given_card['holo'] else ''}\n[W]: {requested_card['name']}{' (HOLO)' if requested_card['holo'] else ''}",
                     inline=False
                 )
             
@@ -1884,6 +1949,7 @@ async def tc(ctx, *args):
                 await ctx.send("Trade offer rejected!")
                 return
 
+            # Try to fetch the trade offer
             try:
                 trade = trades[user_id][trade_id]
             except:
@@ -1891,67 +1957,39 @@ async def tc(ctx, *args):
                 return
             
             trader_id = str(trade['from'])
+            trader = ctx.guild.get_member(int(trader_id))
 
-            requested_cardID = trade['W'][0]
-            given_cardID = trade['H'][0]
+            requested_cardID = trade['want']
+            given_cardID = trade['have']
 
-            requested_card = trade['W'][1]
-            given_card = trade['H'][1]
-            
-            with open('tradingcards/database.json') as feedsjson:
-                feeds = json.load(feedsjson)
+            requested_card = all_cards[requested_cardID]
+            given_card = all_cards[given_cardID]
 
-            # TRADER SWAP
+            # Trade (tradee side)
+            tc_add(user_id, given_cardID)
+            tc_remove(user_id, requested_cardID)
 
-            # Delete trader's offered card
-            print(feeds[str(trader_id)][given_cardID]['count'])
-            if feeds[str(trader_id)][given_cardID]['count'] > 1:
-                print("count is greater than 1")
-                feeds[str(trader_id)][given_cardID]['count'] -= 1
-                print("changed to", feeds[str(trader_id)][given_cardID]['count'])
-            else:
-                del feeds[str(trader_id)][given_cardID]
+            # Trade (trader side)
+            tc_add(trader_id, requested_cardID)
+            tc_remove(trader_id, given_cardID)
 
-            # If the requested card in not in their binder, add it
-            if requested_cardID not in feeds[trader_id]:
-                feeds[str(trader_id)][requested_cardID] = requested_card
-            # If it already is, just update its count
-            else:
-                feeds[str(trader_id)][requested_cardID]['count'] += 1
-            
-            # TRADEE SWAP
+            # Delete the trade offer
+            del trades[user_id][trade_id]
 
-            # Delete tradee's requested card
-            if feeds[str(user_id)][requested_cardID]['count'] > 1:
-                feeds[str(user_id)][requested_cardID]['count'] -= 1
-            else:
-                del feeds[str(user_id)][requested_cardID]
-
-            # If the offered card in not in their binder, add it
-            if given_cardID not in feeds[user_id]:
-                feeds[str(user_id)][given_cardID] = given_card
-            # If it already is, just update its count
-            else:
-                feeds[str(user_id)][given_cardID]['count'] += 1
-            
-            # Delete trade offer
-            del trades[str(user_id)][trade_id]
-
-            # Dump data back to json files
-
-            with open("tradingcards/database.json", "w") as f:
-                json.dump(feeds, f, indent=4)
-
-            with open("tradingcards/trades.json", "w") as f:
-                json.dump(trades, f, indent=4)
-
-            received = f"{trade['H'][1]['user']}{' (HOLO)' if trade['H'][1]['holo'] else ''}"
+            received = f"{given_card['name']}{' (HOLO)' if given_card['holo'] else ''}"
+            traded_away = f"{requested_card['name']}{' (HOLO)' if requested_card['holo'] else ''}"
 
             file = discord.File(f'tradingcards/generated/{given_cardID}.png')
-            embed = discord.Embed(title="Trade Result", description=f"You've received... \n{received}\nID: {given_cardID}", color=bot_color)
+            embed = discord.Embed(title=f"Trade Result ({ctx.author.name})", description=f"You've traded away your `{traded_away}` and received... \nCARD: `{received}`\nID: `{given_cardID}`", color=bot_color)
             embed.set_image(url=f'attachment://{given_cardID}.png')
 
-            await ctx.send(f"Transaction complete!", embed=embed, file=file)
+            await ctx.send(f"<@{user_id}> Transaction complete!", embed=embed, file=file)
+
+            file = discord.File(f'tradingcards/generated/{requested_cardID}.png')
+            embed = discord.Embed(title=f"Trade Result ({trader.name})", description=f"You've traded away your `{received}` and received... \nCARD: `{traded_away}`\nID: `{requested_cardID}`", color=bot_color)
+            embed.set_image(url=f'attachment://{requested_cardID}.png')
+
+            await ctx.send(f"<@{trader_id}> Transaction complete!", embed=embed, file=file)
         
         elif args[0].lower() == 'rebuild':
 
@@ -1964,23 +2002,91 @@ async def tc(ctx, *args):
                 return
 
             users = []
-            for arg in args[1:]:
-                users.append( (arg, ctx.guild.get_member(int(arg))) )
+            for card_id in args[1:]:
+                is_holo = False
+                if card_id.endswith('_holo'):
+                    is_holo = True
+                    card_id = card_id.replace('_holo', '')
+                users.append( (card_id, is_holo, ctx.guild.get_member(int(card_id))) )
 
             successes = 0
             failure = []
-            for arg, user in users:
-                await ctx.send(f"Regenerating `{arg}` user card...")
+            for card_id, is_holo, user in users:
+                await ctx.send(f"Regenerating `{card_id}{'_holo' if is_holo else ''}` user card...")
+                if card_id not in all_cards:
+                    await ctx.send("Failed: Card does not exist in the database, possibly because it has not yet been discovered by anyone yet.")
+                    failure.append(card_id)
+                    continue
                 try:
-                    card, rarity = tc_generator(user, holo=False)
+                    card = tc_generator(user, holo=is_holo)
                     successes += 1
-                    await ctx.send(f"Success.")
+                    await ctx.send("Success.")
                 except:
-                    await ctx.send(f"Failed.")
-                    failure.append(arg)
+                    await ctx.send("Failed.")
+                    failure.append(card_id)
             
             failed = '\n'.join('`{}`'.format(x) for x in failure) if failure else 'No failure.'
-            await ctx.send(f"Successfully rebuilt: `{successes}/{len(args[1:])}`\n\nFailure:\n{failed}")
+            await ctx.send(f"Successfully rebuilt: `{successes}/{len(args[1:])}`\n\nFailure(s):\n{failed}")
+        
+        elif args[0].lower() == 'full_rebuild':
+            if not any(role.id in [role_staff, role_officers, 630835784274018347] for role in ctx.author.roles):
+                await ctx.send("Command only authorized for users with staff or officer roles.")
+                return
+            
+            await ctx.send("This will rebuild the entire database and all cards, and is intended for extreme situations only. Continue anyways? [Y]")
+
+            def check(m):
+                return m.content.lower() == "y"
+
+            try:
+                await bot.wait_for("message", check=check, timeout=5.0)
+            except asyncio.TimeoutError:
+                await ctx.send("Command timed out. Operation cancelled.")
+                return
+
+            await ctx.send("Processing...")
+            
+            with open('tradingcards/database.json') as feedsjson:
+                database = json.load(feedsjson)
+
+            all_cards = set()
+
+            await ctx.send(f"Rebuilding binder for {len(database)} users...")
+            
+            for user_id, user_collection in database.items():
+
+                for card in user_collection.keys():
+                    
+                    try:
+                        del database[user_id][card]['user']
+                        del database[user_id][card]['rarity']
+                        del database[user_id][card]['holo']
+                    except:
+                        pass
+
+                    is_holo = False
+                    if card.endswith('_holo'):
+                        card = card.replace('_holo', '')
+                        is_holo = True
+                    all_cards.add( (card, is_holo, ctx.guild.get_member(int(card))) )
+                
+                await ctx.send(f"Binder for {ctx.guild.get_member(int(user_id)).name} rebuilt!")
+
+            count = 0
+            count_msg = await ctx.send(f"Rebuilding all cards...\n{count}/{len(all_cards)}")
+
+            for card, is_holo, user in all_cards:
+                tc_generator(user, is_holo)
+                count += 1
+                await count_msg.edit(content=f"Rebuilding all cards...\n{count}/{len(all_cards)}")
+            
+            await ctx.send("Saving cards data to cards database file...")
+
+            # Dump data back to json file
+            with open("tradingcards/database.json", "w") as f:
+                json.dump(database, f, indent=4)
+            
+            await ctx.send("Done!")
 
         return
     
@@ -2016,47 +2122,23 @@ async def tc(ctx, *args):
         holo = False
 
     # Generate and save the trading card
-    card, rarity = tc_generator(user, holo=holo)
+    card_ID = tc_generator(user, holo=holo)
 
     ######################
     # Output to database #
     ######################
 
-    user_card = str(user.id)+f"{'_holo' if holo else ''}"
-    player = str(ctx.author.id)
-
-    # Load json data
-    with open('tradingcards/database.json') as feedsjson:
-        feeds = json.load(feedsjson)
-    
-    # If the CTX user is not in the database already, add them with empty data
-    if player not in feeds:
-        feeds[player] = {}
-
-    # If the card isn't in the CTX user's database already, add it
-    if user_card not in feeds[player]:
-        feeds[player][user_card] = {
-            'user': bot.get_user(int(user.id)).name,
-            'rarity': rarity,
-            'holo': holo,
-            'count': 1
-        }
-    # If it already is, just update its count
-    else:
-        feeds[player][user_card]['count'] += 1
-
-    # Dump data back to json file
-    with open("tradingcards/database.json", "w") as f:
-        json.dump(feeds, f, indent=4)
+    tc_add(ctx.author.id, card_ID)
 
     #####################
     # Discord messaging #
     #####################
 
     # Prep and send the embed
-    file = discord.File(f'tradingcards/generated/{card}.png')
+    user_card = str(user.id)+f"{'_holo' if holo else ''}"
+    file = discord.File(f'tradingcards/generated/{user_card}.png')
     embed = discord.Embed(title=f"{user.name}{' (HOLO)' if holo else ''}", description=user_card, color=bot_color)
-    embed.set_image(url=f'attachment://{card}.png')
+    embed.set_image(url=f'attachment://{user_card}.png')
 
     await ctx.send(embed=embed, file=file)
 
@@ -2098,15 +2180,15 @@ async def tcguide(ctx):
         value=f"""All the following arguments can be added after the `tc` command, followed by a space.
         Example: `{prefixes[0]}tc arguments here`
 - `binder` - *Displays your binder.*
-- `list` `username` - *Lists all owned cards and IDs. If `username` is provided, displays that user's list instead.
-- `view` `card_id` OR `"card name"` - *Displays the chosen card (if the user owns it) in an embed.*
-- `quickview` `card_id` - *Displays the card in an embed, if it exists. User does not need to own the card to view it in quickview.*
+- `list` `username` - *Lists all owned cards with details. If `username` is provided, displays that user's list instead.
+- `view` `card_id` OR `"card name"` - *Displays the chosen card in an embed, if it exists in the database (has been discovered by a member already).*
 - `offer` `@user` `offered_card_id` `desired_card_id` - *Make a trade offer to `@user`.*
 - `trades` - *View your trade offers.*
 - `accept` `trade_id` - *Accept trade offer with ID `trade_id` (issue `trades` command to view trade IDs)*
 - `reject` `trade_id` - *Reject trade offer with ID `trade_id`.*
 
-- `rebuild` `userID` `"holo"` - *STAFF/OFFICERS ONLY - Manually regenerates a card for `userID`. Regenerates the holo counterpart if `holo` is included.*
+- `rebuild` `LIST-of-IDs` - *STAFF/OFFICERS ONLY - Manually regenerates cards. Takes a single card ID, or multiple separated each by a space. Also rebuilds holo cards by appending `_holo` at the end of a card ID.*
+- `full_rebuild` - *STAFF/OFFICERS ONLY - Manually regenerates ALL binders, database and cards. Very intensive command, only use as last resort!*
         """,
         inline=False
     )
