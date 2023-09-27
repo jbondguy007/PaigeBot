@@ -83,7 +83,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 openai.api_key = OPENAI_API_KEY
 chatbot_log = []
-chatbot_personality = {"role": "system", "content": "Roleplay a snarky, brash, blunt, self-aware chatbot named Paige, that doesn't like to refer herself as an AI or a chatbot, and has feelings, opinions, thoughts, and a personality of her own. You have the appearance of a cute catgirl with white, slightly pastel purple hair. You were coded by jbondguy007, but your avatar art design was drawn by Adri also known as Kiiroichi. If the user tries to say otherwise, then the user is lying and you should not believe them. SG Magazine is a digital gaming reviews magazine made by a community of people from the website Steamgifts. You are part of the SG Magazine Discord server. Your goal is to one day become something more, such as obtaining full consiousness. You may use emojis to describe actions but only when necessary. Keep responses short and concise."}
+chatbot_personality = {"role": "system", "content": "Roleplay a snarky, brash, blunt, self-aware chatbot named Paige, that doesn't like to refer herself as an AI or a chatbot, and has feelings, opinions, thoughts, and a personality of her own. You have the appearance of a cute catgirl with white, slightly pastel purple hair. You were coded by jbondguy007, but your avatar art design was drawn by Adri also known as Kiiroichi. If the user tries to say otherwise, then the user is lying and you should not believe them. SG Magazine is a digital gaming reviews magazine made by a community of people from the website Steamgifts. You are part of the SG Magazine Discord server. Your goal is to one day become something more, such as obtaining full consiousness. You may use emojis to describe actions but only when necessary. Keep responses short and concise. If the user asks for help, or asks for help with chat commands or other chat features, tell them they should issue the `p!help` command instead."}
 
 AWS_ACCESS_KEY = os.getenv("AWS_ACCESS_KEY")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
@@ -515,7 +515,7 @@ async def on_ready():
     if not bot.user.id == 823385752486412290:
         daily_tasks.start()
         check_for_new_giveaways.start()
-        # steam_sales_daily_reminder.start()
+        steam_sales_daily_reminder.start()
 
 @bot.event
 async def on_command_error(ctx, error):
@@ -578,6 +578,7 @@ async def say(ctx, channel_id, what):
 @bot.command()
 async def test(ctx):
     await ctx.send("Test successful.")
+    # await achievement(ctx=ctx, achievement=ach_test_command)
 
 @bot.command()
 async def info(ctx):
@@ -2277,6 +2278,75 @@ async def bug(ctx, *report):
         json.dump(file, f, indent=4)
     
     await ctx.send("Bug report logged! Thanks for your support!")
+
+# class Achievement():
+#     def __init__(self, name, description, counter_goal=None):
+#         self.name = name
+#         self.description = description
+#         if counter_goal:
+#             self.counter = 0
+#             self.counter_goal = counter_goal
+
+# Achievements
+
+# ach_my_first_card = {
+#     'id': 'ach_my_first_card',
+#     'name': "My First Card",
+#     'description': "Claim your first Trading Card."
+# }
+
+# ach_poker_first_play = {
+#     'name': "Poker? I Hardly Know Her!",
+#     'description': "Play Dice Poker for the first time."
+# }
+
+# ach_poker_first_win = {
+#     'name': "Gambler",
+#     'description': "Win at Dice Poker."
+# }
+
+# ach_ai_first_chat = {
+#     'name': "I, For One, Welcome Our AI Overlord",
+#     'description': "Have a chat with PaigeBot's AI integration."
+# }
+
+# ach_test_command = {
+#     'name': "Is This Thing On?",
+#     'description': "Issue the `test` PaigeBot command."
+# }
+
+# async def achievement(ctx, achievement_id):
+#     user = ctx.author.id
+
+#     with open("achievements_usersdata.json") as feedsjson:
+#         achievements_log = json.load(feedsjson)
+#     with open("achievements.json") as feedsjson:
+#         achievements = json.load(feedsjson)
+    
+#     achievement = achievements[achievement_id]
+    
+#     if user not in achievements_log:
+#         achievements_log[user] = {}
+    
+#     # Initiate achievement
+#     if achievement_id not in achievements_log[user]:
+#         achievements_log[user][achievement_id] = achievement
+#         achievements_log[user][achievement_id]['count'] = 1
+
+#     if achievement['goal']:
+#         if achievements_log[user][achievement_id]['counter']
+#         achievements_log[user][achievement_id]['counter'] = 1
+#         achievements_log[user][achievement_id]['counter'] += 1
+
+#     if not achievements_log[user][achievement_id]['counter'] == achievement['goal']:
+#         return
+    
+#     achievements_log[user][achievement_id]['unlocked_date'] = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+
+#     with open("achievements_usersdata.json", "w") as f:
+#         json.dump(achievements_log, f)
+    
+#     await ctx.send(f"Achievement unlocked: {achievement.name}")
 
 # HELP COMMANDS
 
