@@ -63,10 +63,12 @@ role_interviewers = 1132003617046528050
 role_bots = 1067986921021788261
 role_gamenight = 1142304222176608340
 
+jbondguy007_userID = 172522306147581952
+
 # TODO IF TESTING: Set to arial.ttf
 
-chosen_font = "DejaVuSans.ttf"
-# chosen_font = "arial.ttf"
+# chosen_font = "DejaVuSans.ttf"
+chosen_font = "arial.ttf"
 
 with open("permanent_variables.json", "r") as f:
     permanent_variables = json.load(f)
@@ -121,7 +123,7 @@ def upload_backups():
     print('Done!')
 
 class Buttons(discord.ui.View):
-    def __init__(self, prize, feeds, ctx, message=None, *, timeout=120):
+    def __init__(self, prize, feeds, ctx, message=None, *, timeout=300):
         super().__init__(timeout=timeout)
         self.prize = prize
         self.feeds = feeds
@@ -673,7 +675,8 @@ async def deadlines(ctx):
         )
 
     await ctx.send(embed=embed)
-    await ctx.send(embed=embed2)
+    if len(deadlines) > 25:
+        await ctx.send(embed=embed2)
 
 @bot.command()
 async def giveaways(ctx):
@@ -1034,6 +1037,10 @@ def checkin_check(ctx, file='slots_checkin.json', cooldown=slots_cooldown):
 @bot.command()
 async def slots(ctx):
 
+    if not ctx.guild:
+        await ctx.send("The `slots` commands cannot be executed from Direct Messages.")
+        return
+
     # Check if prize pool file is empty
     if os.path.getsize('slots_prizes.json') <= 2:
         await ctx.send("Unfortunately, the prize pool is currently empty. Try again another time!\nConsider donating a prize to the pool via the `slotskey` command.")
@@ -1046,7 +1053,8 @@ async def slots(ctx):
     allowed, cooldown = checkin_check(ctx)
 
     if not allowed:
-        await ctx.send(f"Please wait `{cooldown}` before trying again!")
+        unix_timestamp = int(time.mktime((datetime.now()+cooldown).timetuple()))
+        await ctx.send(f"Please wait `{cooldown}` (<t:{unix_timestamp}:R>) before trying again!")
         return
     
     # Log the check-in time to the json file
@@ -1086,7 +1094,7 @@ async def slots(ctx):
     await ctx.author.send(f"Congratulations on winning at PaigeSlots! You've won a key for `{prize['title']}` (activates on `{prize['platform']}`)")
     view=Buttons(prize, feeds, ctx=ctx)
     view.start_timeout()
-    view.message = await ctx.author.send(f"Would you like to reveal the key for {prize['title']}, or redistribute it to the prize pool? (2 minutes until automatically revealed)",view=view)
+    view.message = await ctx.author.send(f"Would you like to reveal the key for {prize['title']}, or redistribute it to the prize pool? (5 minutes until automatically revealed)",view=view)
 
 @bot.command()
 async def slotskey(ctx, *, args:commands.clean_content(fix_channel_mentions=False, use_nicknames=False)=None):
@@ -1741,16 +1749,27 @@ async def tc(ctx, *args):
 
         if args[0].lower() == 'binder':
 
+            if len(args) > 1:
+                try:
+                    user = get_user_from_username(args[1])
+                except:
+                    await ctx.send("User not found in database!")
+                    return
+            else:
+                user = ctx.author
+
             try:
-                binders = binder_generator(ctx.author.id)
+                binders = binder_generator(user.id)
             except:
                 await ctx.send("Empty binder!")
                 return
             
+            await ctx.send("Processing binder, please wait...")
+            
             # Prep and send the embed
             for i, binder in enumerate(binders):
                 file = discord.File(f'tradingcards/generated/{binder}.png')
-                embed = discord.Embed(title=f"{ctx.author.name}'s Binder Page {str(i+1)}", color=bot_color)
+                embed = discord.Embed(title=f"{user.name}'s Binder Page {str(i+1)}", color=bot_color)
                 embed.set_image(url=f'attachment://{binder}.png')
                     
                 await ctx.send(embed=embed, file=file)
@@ -1763,7 +1782,6 @@ async def tc(ctx, *args):
                 except:
                     await ctx.send("User not found in database!")
                     return
-            
             else:
                 user = ctx.author
 
@@ -1947,6 +1965,8 @@ async def tc(ctx, *args):
             if args[0].lower() == 'reject':
                 # Delete trade offer
                 del trades[user_id][trade_id]
+                with open("tradingcards/trades.json", "w") as f:
+                    json.dump(trades, f, indent=4)
                 await ctx.send("Trade offer rejected!")
                 return
 
@@ -1966,6 +1986,31 @@ async def tc(ctx, *args):
             requested_card = all_cards[requested_cardID]
             given_card = all_cards[given_cardID]
 
+            received = f"{given_card['name']}{' (HOLO)' if given_card['holo'] else ''}"
+            traded_away = f"{requested_card['name']}{' (HOLO)' if requested_card['holo'] else ''}"
+
+            # Check if the tradee's card is still available for trading
+            try:
+                deliver = database[str(user)][requested_cardID]
+            except:
+                await ctx.send(f"Trade failed! {ctx.author.name} no longer has card `{traded_away}`.")
+                # Delete trade offer
+                del trades[user_id][trade_id]
+                with open("tradingcards/trades.json", "w") as f:
+                    json.dump(trades, f, indent=4)
+                return
+
+            # Check if the trader's card is still available for trading
+            try:
+                receive = database[str(trader)][given_cardID]
+            except:
+                await ctx.send(f"Trade failed! {trader} no longer has card `{received}`.")
+                # Delete trade offer
+                del trades[user_id][trade_id]
+                with open("tradingcards/trades.json", "w") as f:
+                    json.dump(trades, f, indent=4)
+                return
+            
             # Trade (tradee side)
             tc_add(user_id, given_cardID)
             tc_remove(user_id, requested_cardID)
@@ -1976,9 +2021,8 @@ async def tc(ctx, *args):
 
             # Delete the trade offer
             del trades[user_id][trade_id]
-
-            received = f"{given_card['name']}{' (HOLO)' if given_card['holo'] else ''}"
-            traded_away = f"{requested_card['name']}{' (HOLO)' if requested_card['holo'] else ''}"
+            with open("tradingcards/trades.json", "w") as f:
+                json.dump(trades, f, indent=4)
 
             file = discord.File(f'tradingcards/generated/{given_cardID}.png')
             embed = discord.Embed(title=f"Trade Result ({ctx.author.name})", description=f"You've traded away your `{traded_away}` and received... \nCARD: `{received}`\nID: `{given_cardID}`", color=bot_color)
@@ -2030,7 +2074,7 @@ async def tc(ctx, *args):
             await ctx.send(f"Successfully rebuilt: `{successes}/{len(args[1:])}`\n\nFailure(s):\n{failed}")
         
         elif args[0].lower() == 'full_rebuild':
-            if not ctx.author.id == 172522306147581952:
+            if not ctx.author.id == jbondguy007_userID:
                 await ctx.send("Command only authorized to botmaster (jbondguy007).")
                 return
             
@@ -2088,6 +2132,38 @@ async def tc(ctx, *args):
                 json.dump(database, f, indent=4)
             
             await ctx.send("Done!")
+        
+        elif args[0].lower() == 'grant':
+            if len(args) < 3:
+                await ctx.send("Command requires userID and cardID arguments.")
+                return
+
+            if not ctx.author.id == jbondguy007_userID:
+                await ctx.send("Command only authorized to botmaster (jbondguy007).")
+                return
+            
+            userID = args[1]
+            cardID = args[2]
+            
+            tc_add(user_ID=userID, card_ID=cardID)
+
+            await ctx.send(f"Card `{cardID}` added to user `{userID}` collection.")
+        
+        elif args[0].lower() == 'remove':
+            if len(args) < 3:
+                await ctx.send("Command requires userID and cardID arguments.")
+                return
+
+            if not ctx.author.id == jbondguy007_userID:
+                await ctx.send("Command only authorized to botmaster (jbondguy007).")
+                return
+            
+            userID = args[1]
+            cardID = args[2]
+
+            tc_remove(user_ID=userID, card_ID=cardID)
+
+            await ctx.send(f"Card `{cardID}` removed from user `{userID}` collection.")
 
         return
     
@@ -2100,8 +2176,10 @@ async def tc(ctx, *args):
     checkin_file = 'tradingcards/tc_checkin.json'
     
     allowed, cooldown = checkin_check(ctx, file=checkin_file, cooldown=tc_cooldown)
+
     if not allowed:
-        await ctx.send(f"Please wait `{cooldown}` before pulling for another trading card!")
+        unix_timestamp = int(time.mktime((datetime.now()+cooldown).timetuple()))
+        await ctx.send(f"Please wait `{cooldown}` (<t:{unix_timestamp}:R>) before pulling for another trading card!")
         return
     
     # Log the check-in time to the json file
@@ -2181,8 +2259,8 @@ async def tcguide(ctx):
     embed2 = discord.Embed(title="Trading Cards Guide (Command Arguments)", description=f"All the following arguments can be added after the `tc` command, followed by a space.\nExample: `{prefixes[0]}tc arguments here`", color=bot_color)
 
     embed2.add_field(
-        name="binder",
-        value=f"*Displays your binder.*",
+        name="binder username",
+        value=f"*Displays your binder. If username is provided, displays that user's binder instead.*",
         inline=False
     )
 
@@ -2193,7 +2271,7 @@ async def tcguide(ctx):
     )
 
     embed2.add_field(
-        name="view card_id OR \"card name\"",
+        name="view card_id OR view \"card name\"",
         value=f"*Displays the chosen card in an embed, if it exists in the database (has been discovered by a member already).*",
         inline=False
     )
@@ -2278,6 +2356,51 @@ async def bug(ctx, *report):
         json.dump(file, f, indent=4)
     
     await ctx.send("Bug report logged! Thanks for your support!")
+
+@bot.command()
+async def buglog(ctx, *args):
+
+    with open('bug_reports.json') as feedsjson:
+        file = json.load(feedsjson)
+
+    if args:
+        if args[0].lower() == 'clear':
+            if not ctx.author.id == jbondguy007_userID:
+                await ctx.send("Clearing bug reports is only authorized for jbondguy007.")
+                return
+            if len(args) < 2:
+                await ctx.send("Clear command requires `reportID` argument.")
+                return
+            try:
+                del file[args[1]]
+                with open("bug_reports.json", "w") as f:
+                    json.dump(file, f, indent=4)
+                await ctx.send(f"Cleared bug report `{args[1]}`.")
+                return
+            except:
+                await ctx.send(f"Error attempting to clear bug report `{args[1]}`.")
+                return
+        else:
+            await ctx.send(f"Unrecognized command argument `{args[0]}`.")
+            return
+    
+    embed = discord.Embed(title="Bug Reports Log")
+
+    for report_ID, report in file.items():
+        embed.add_field(
+            name=f"Report ID: {report_ID}\nReporter: {report['reporter']}\nReport Link: {report['message_link']}",
+            value=report['report'],
+            inline=False
+        )
+    
+    if len(file) == 0:
+        embed.add_field(
+            name="No bug reports pending!",
+            value="",
+            inline=False
+        )
+    
+    await ctx.send(embed=embed)
 
 # class Achievement():
 #     def __init__(self, name, description, counter_goal=None):
@@ -2429,7 +2552,10 @@ async def help(ctx, query=None):
          "Grants the user the role `\"Role Name\"`, if it is an authorized self-role. Revokes the role if the user already has it."),
 
         ("bug `message`",
-         f"Logs a bug report. Please include details as `message` - example: `{prefixes[0]}bug The trading card guide has a typo in the rarity sections.`")
+         f"Logs a bug report. Please include details as `message` - example: `{prefixes[0]}bug The trading card guide has a typo in the rarity sections.`"),
+
+        ("buglog `clear reportID`",
+         "Displays all pending bug reports. JBONDGUY007 ONLY: If `clear reportID` arguments are provided, clears report with id `reportID` from the bug log.")
     ]
 
     mod_commands_list = [
@@ -2449,10 +2575,7 @@ async def help(ctx, query=None):
          "Wipes PaigeBot's AI integration memory bank. Can be used to force the AI to get back on track if it gets stuck on a topic/personality."),
 
         ("backup",
-         "Runs a manual backup of PaigeBot's files and database. This task is already executed daily."),
-
-        ("buglog `clear reportID`",
-         "Displays all pending bug reports. If `clear reportID` is provided, clears report with id `reportID` from the bug log.")
+         "Runs a manual backup of PaigeBot's files and database. This task is already executed daily.")
     ]
 
     # Individual help by query.
@@ -2640,49 +2763,6 @@ async def premiumga(ctx, url):
     await channel.send(embed=embed)
     await ctx.send("Premium giveaway announced!")
 
-@bot.command()
-@commands.has_any_role(role_staff)
-async def buglog(ctx, *args):
-
-    with open('bug_reports.json') as feedsjson:
-        file = json.load(feedsjson)
-
-    if args:
-        if args[0].lower() == 'clear':
-            if len(args) < 2:
-                await ctx.send("Clear command requires `reportID` argument.")
-                return
-            try:
-                del file[args[1]]
-                with open("bug_reports.json", "w") as f:
-                    json.dump(file, f, indent=4)
-                await ctx.send(f"Cleared bug report `{args[1]}`.")
-                return
-            except:
-                await ctx.send(f"Error attempting to clear bug report `{args[1]}`.")
-                return
-        else:
-            await ctx.send(f"Unrecognized command argument `{args[0]}`.")
-            return
-    
-    embed = discord.Embed(title="Bug Reports Log")
-
-    for report_ID, report in file.items():
-        embed.add_field(
-            name=f"Report ID: {report_ID}\nReporter: {report['reporter']}\nReport Link: {report['message_link']}",
-            value=report['report'],
-            inline=False
-        )
-    
-    if len(file) == 0:
-        embed.add_field(
-            name="No bug reports pending!",
-            value="",
-            inline=False
-        )
-    
-    await ctx.send(embed=embed)
-
 # TASKS
 
 @tasks.loop(minutes=30)
@@ -2774,6 +2854,6 @@ async def steam_sales_daily_reminder():
     time = datetime.now().hour
     if time == 14:
         cha = bot.get_channel(general_channel)
-        await cha.send("Remember to get your free daily sticker: <https://store.steampowered.com/category/strategy>")
+        await cha.send("Remember to get your free daily sticker: <https://store.steampowered.com/category/shmup>")
 
 bot.run(TOKEN)
