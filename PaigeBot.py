@@ -1911,14 +1911,16 @@ async def tc(ctx, *args):
                 database = json.load(feedsjson)
 
             try:
-                trades = trades[str(ctx.author.id)]
+                user_trades = trades[str(ctx.author.id)]
             except:
                 await ctx.send("You have no trading cards trade offers pending.")
                 return
             
             embed = discord.Embed(title=f"{ctx.author.name}'s Trade Offers", description=f"Issue the command `{prefixes[0]}tc accept trade-ID` to accept trades, or `{prefixes[0]}tc reject trade-ID` to reject them.")
 
-            for tradeID, details in trades.items():
+            trades_for_deletion = []
+
+            for tradeID, details in user_trades.items():
                 
                 # EXAMPLE:
                     # tradeID: 1142364330424279111
@@ -1937,12 +1939,14 @@ async def tc(ctx, *args):
                 try:
                     receive = database[str(trader)][given_card_ID]
                 except:
+                    trades_for_deletion.append(tradeID)
                     continue
 
                 # Check if the tradee's card is still available for trading
                 try:
                     deliver = database[str(user)][requested_card_ID]
                 except:
+                    trades_for_deletion.append(tradeID)
                     continue
 
                 embed.add_field(
@@ -1951,6 +1955,17 @@ async def tc(ctx, *args):
                     inline=False
                 )
             
+            if trades_for_deletion:
+                for trade_ID in trades_for_deletion:
+                    del trades[str(user)][trade_ID]
+                # Update trades file in case a trade was deleted
+                with open("tradingcards/trades.json", "w") as f:
+                    json.dump(trades, f, indent=4)
+            
+            if not embed.fields:
+                await ctx.send("You have no trading cards trade offers pending.")
+                return
+
             await ctx.send(embed=embed)
 
         elif args[0].lower() == 'accept' or args[0].lower() == 'reject':
