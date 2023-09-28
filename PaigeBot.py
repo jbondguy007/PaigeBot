@@ -1748,6 +1748,7 @@ async def tc(ctx, *args):
             all_cards = json.load(feedsjson)
 
         if args[0].lower() == 'binder':
+            await ctx.send("Processing binder, please wait...")
 
             if len(args) > 1:
                 try:
@@ -1763,8 +1764,6 @@ async def tc(ctx, *args):
             except:
                 await ctx.send("Empty binder!")
                 return
-            
-            await ctx.send("Processing binder, please wait...")
             
             # Prep and send the embed
             for i, binder in enumerate(binders):
@@ -1991,8 +1990,9 @@ async def tc(ctx, *args):
 
             # Check if the tradee's card is still available for trading
             try:
-                deliver = database[str(user)][requested_cardID]
-            except:
+                deliver = database[str(user_id)][requested_cardID]
+            except Exception as error:
+                print(error)
                 await ctx.send(f"Trade failed! {ctx.author.name} no longer has card `{traded_away}`.")
                 # Delete trade offer
                 del trades[user_id][trade_id]
@@ -2002,8 +2002,9 @@ async def tc(ctx, *args):
 
             # Check if the trader's card is still available for trading
             try:
-                receive = database[str(trader)][given_cardID]
-            except:
+                receive = database[str(trader_id)][given_cardID]
+            except Exception as error:
+                print(error)
                 await ctx.send(f"Trade failed! {trader} no longer has card `{received}`.")
                 # Delete trade offer
                 del trades[user_id][trade_id]
@@ -2546,7 +2547,7 @@ async def help(ctx, query=None):
          f"Challenges `@user` to a game of Dice Poker. See `pokerguide` (`{prefixes[0]}pokerguide`) for more."),
 
         ("tc `arguments`",
-         f"No argument: Claims a trading card. Can be issued every 24 hours. See `tcguide` (`{prefixes[0]}tcguide`) for more."),
+         f"No argument: Claims a trading card. Has a cooldown time of {tc_cooldown}. See `tcguide` (`{prefixes[0]}tcguide`) for more."),
 
         ("role `\"role name\"`",
          "Grants the user the role `\"Role Name\"`, if it is an authorized self-role. Revokes the role if the user already has it."),
