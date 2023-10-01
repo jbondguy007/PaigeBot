@@ -379,6 +379,57 @@ def fetch_members_owned_games():
     
     print(f"Done! {private_profiles_count} profiles were private or otherwise inaccessible, and were not parsed.")
 
+def search_magazine_index(query):
+
+    # Try to get game title from AppID, else use query as game title
+    try:
+        game_title = fetch_appid_info(query)['name']
+    except:
+        game_title = query
+    
+    url = 'https://steamcommunity.com/groups/SGMonthlyMagazine/discussions/4/3790379982488876975/'
+    r = requests.get(url)
+    page = bs(r.content, "html.parser")
+    thread = page.find("div", {"id": "forum_op_3790379982488876975"})
+    content = thread.find("div", {"class": "content"})
+
+    reviews = content.find_all("ol")
+    issues = content.find_all("div", {"class": "bb_h1"})
+
+    links = content.find_all("a", {"class": "bb_link"})
+    magazine_links = []
+
+    for i, link in enumerate(links):
+        # print(link.get("href"))
+        if link.get("href").startswith('https://steamcommunity.com/linkfilter/?url=https://heyzine.com/flip-book/'):
+            magazine_links.append(link.get("href"))
+    
+    print(magazine_links)
+
+    for i, issue in enumerate(issues):
+
+        for review in reviews[i]:
+            if review.text.lower().strip() == game_title.lower().strip():
+                game_info = {
+                    "title": review.text,
+                    "AppID": review.find("a").get("href").split('/')[4],
+                    "issue": issue.text,
+                    "issue_link": magazine_links[i].replace("https://steamcommunity.com/linkfilter/?url=", "")
+                }
+                return game_info
+    
+    return 0
+
+    # for reviewed_games in editions:
+    #     for game in reviewed_games:
+    #         if game.text.lower().strip() == query.lower().strip():
+    #             edition = editions.find("div", {"class": "bb_h1"})
+    #             print(edition)
+    #         else:
+    #             continue
+        
+    # return 0
+
 def steamID_to_name():
 
     print("Running steamID_to_name()...")
@@ -1730,6 +1781,8 @@ def tc_remove(user_ID, card_ID):
     with open("tradingcards/database.json", "w") as f:
         json.dump(database, f, indent=4)
 
+prevent_binder_command = False
+
 @bot.command()
 async def tc(ctx, *args):
 
@@ -1748,6 +1801,11 @@ async def tc(ctx, *args):
             all_cards = json.load(feedsjson)
 
         if args[0].lower() == 'binder':
+            global prevent_binder_command
+            if prevent_binder_command:
+                await ctx.send(f"<@{ctx.author.id}> Processing a binder already, please wait and try again later.")
+                return
+            prevent_binder_command = True
             await ctx.send("Processing binder, please wait...")
 
             if len(args) > 1:
@@ -1772,8 +1830,10 @@ async def tc(ctx, *args):
                 embed.set_image(url=f'attachment://{binder}.png')
                     
                 await ctx.send(embed=embed, file=file)
+            
+            prevent_binder_command = False
         
-        elif args[0].lower() == 'list':
+        elif args[0].lower() == 'list' or args[0].lower() == 'dups':
             
             if len(args) > 1:
                 try:
@@ -1789,13 +1849,17 @@ async def tc(ctx, *args):
                 return
 
             player_collection = fetch_player_collection(str(user.id))
-            keys = list(player_collection.keys())
 
             batch_size = 25
+
+            if args[0].lower() == 'dups':
+                player_collection = {k: v for k, v in player_collection.items() if v['count'] > 1}
+
+            keys = list(player_collection.keys())
             collection_size = len(keys)
 
             for i in range(0, collection_size, batch_size):
-                embed = discord.Embed(title=f"{user.name}'s Cards List", color=bot_color)
+                embed = discord.Embed(title=f"{user.name}'s {'Duplicate ' if args[0].lower() == 'dups' else ''}Cards List", color=bot_color)
 
                 batch_keys = keys[i:i + batch_size]
                 batch_dict = {key: player_collection[key] for key in batch_keys}
@@ -2235,7 +2299,7 @@ async def tc(ctx, *args):
     embed = discord.Embed(title=f"{user.name}{' (HOLO)' if holo else ''}", description=user_card, color=bot_color)
     embed.set_image(url=f'attachment://{user_card}.png')
 
-    await ctx.send(embed=embed, file=file)
+    await ctx.send(content=f"{ctx.author.name} has pulled a `{user.name}{' (HOLO)' if holo else ''}` card!", embed=embed, file=file)
 
 @bot.command()
 async def tcguide(ctx):
@@ -2283,6 +2347,12 @@ async def tcguide(ctx):
     embed2.add_field(
         name="list username",
         value=f"*Lists all owned cards with details. If username is provided, displays that user's list instead.*",
+        inline=False
+    )
+
+    embed2.add_field(
+        name="dups username",
+        value=f"*Lists all cards which have duplicates (more than 1 count). If username is provided, displays that user's list instead.*",
         inline=False
     )
 
@@ -2371,7 +2441,7 @@ async def bug(ctx, *report):
     with open("bug_reports.json", "w") as f:
         json.dump(file, f, indent=4)
     
-    await ctx.send("Bug report logged! Thanks for your support!")
+    await ctx.send(f"Bug report `{ctx.message.id}` logged! Thanks for your support!")
 
 @bot.command()
 async def buglog(ctx, *args):
@@ -2388,10 +2458,11 @@ async def buglog(ctx, *args):
                 await ctx.send("Clear command requires `reportID` argument.")
                 return
             try:
+                bug = file[args[1]]
                 del file[args[1]]
                 with open("bug_reports.json", "w") as f:
                     json.dump(file, f, indent=4)
-                await ctx.send(f"Cleared bug report `{args[1]}`.")
+                await ctx.send(f"Cleared bug report:\nReport ID: `{args[1]}`\nDescription: `{bug['report']}`")
                 return
             except:
                 await ctx.send(f"Error attempting to clear bug report `{args[1]}`.")
@@ -2416,6 +2487,22 @@ async def buglog(ctx, *args):
             inline=False
         )
     
+    await ctx.send(embed=embed)
+
+@bot.command()
+async def reviewed(ctx, *query):
+    query = ' '.join(query)
+    game = search_magazine_index(query)
+    if not game:
+        await ctx.send(f"`{query}` not found in the magazine index.")
+        return
+
+    embed = discord.Embed(title=f"\"{game['title']}\" Review", url=game['issue_link'])
+    embed.set_image(url=f"https://cdn.akamai.steamstatic.com/steam/apps/{game['AppID']}/header.jpg")
+    embed.add_field(
+        name=f"{game['title']} was reviewed as part of {game['issue']}.",
+        value=f"*Click the link above the embed to check out {game['issue'].split(',')[0]}!*"
+    )
     await ctx.send(embed=embed)
 
 # class Achievement():
@@ -2571,7 +2658,10 @@ async def help(ctx, query=None):
          f"Logs a bug report. Please include details as `message` - example: `{prefixes[0]}bug The trading card guide has a typo in the rarity sections.`"),
 
         ("buglog `clear reportID`",
-         "Displays all pending bug reports. JBONDGUY007 ONLY: If `clear reportID` arguments are provided, clears report with id `reportID` from the bug log.")
+         "Displays all pending bug reports. JBONDGUY007 ONLY: If `clear reportID` arguments are provided, clears report with id `reportID` from the bug log."),
+        
+        ("reviewed `game`",
+         "Searches for `game` in the magazine index, and returns the link to the magazine in which this game was reviewed, if any. `game` may be a full game title (not case-sensitive) or AppID.")
     ]
 
     mod_commands_list = [
@@ -2627,12 +2717,20 @@ async def help(ctx, query=None):
          # Stop processing any further.
         return
 
-    public_commands = discord.Embed(title="Commands", description="The below commands are available to issue anywhere within the server, except where stated otherwise.", color=bot_color)
+    public_commands1 = discord.Embed(title="Commands", description="The below commands are available to issue anywhere within the server, except where stated otherwise.", color=bot_color)
+    public_commands2 = discord.Embed(title="Commands (Continued...)", color=bot_color)
 
     moderator_commands = discord.Embed(title="Moderator Commands", description="The below commands are only permitted by users with moderator roles.", color=bot_color)
 
-    for com in commands_list:
-        public_commands.add_field(
+    for com in commands_list[:25]:
+        public_commands1.add_field(
+            name=com[0],
+            value=f"*{com[1]}*",
+            inline=False
+        )
+
+    for com in commands_list[25:]:
+        public_commands2.add_field(
             name=com[0],
             value=f"*{com[1]}*",
             inline=False
@@ -2645,7 +2743,8 @@ async def help(ctx, query=None):
             inline=False
         )
 
-    await ctx.send(embed=public_commands)
+    await ctx.send(embed=public_commands1)
+    await ctx.send(embed=public_commands2)
     await ctx.send(embed=moderator_commands)
 
 # MODERATOR COMMANDS
