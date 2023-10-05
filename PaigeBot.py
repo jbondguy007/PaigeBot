@@ -568,7 +568,7 @@ async def on_ready():
     if not bot.user.id == 823385752486412290:
         daily_tasks.start()
         check_for_new_giveaways.start()
-        steam_sales_daily_reminder.start()
+        # steam_sales_daily_reminder.start()
 
 @bot.event
 async def on_command_error(ctx, error):
@@ -1809,9 +1809,8 @@ async def tc(ctx, *args):
             await ctx.send("Processing binder, please wait...")
 
             if len(args) > 1:
-                try:
-                    user = get_user_from_username(args[1])
-                except:
+                user = get_user_from_username(args[1])
+                if not user:
                     await ctx.send("User not found in database!")
                     return
             else:
@@ -1821,6 +1820,7 @@ async def tc(ctx, *args):
                 binders = binder_generator(user.id)
             except:
                 await ctx.send("Empty binder!")
+                prevent_binder_command = False
                 return
             
             # Prep and send the embed
@@ -1836,9 +1836,8 @@ async def tc(ctx, *args):
         elif args[0].lower() == 'list' or args[0].lower() == 'dups':
             
             if len(args) > 1:
-                try:
-                    user = get_user_from_username(args[1])
-                except:
+                user = get_user_from_username(args[1])
+                if not user:
                     await ctx.send("User not found in database!")
                     return
             else:
@@ -1854,6 +1853,10 @@ async def tc(ctx, *args):
 
             if args[0].lower() == 'dups':
                 player_collection = {k: v for k, v in player_collection.items() if v['count'] > 1}
+            
+            if not player_collection:
+                await ctx.send(f"No duplicate cards found for user {user.name}!")
+                return
 
             keys = list(player_collection.keys())
             collection_size = len(keys)
@@ -1871,6 +1874,8 @@ async def tc(ctx, *args):
                         inline=True
                     )
                 
+
+                
                 await ctx.send(embed=embed)
 
         elif args[0].lower() == 'view':
@@ -1886,10 +1891,10 @@ async def tc(ctx, *args):
                 queried_card = queried_card.replace(' (HOLO)', '')
                 is_holo = True
 
-            try:
-                user = get_user_from_username(queried_card)
+            user = get_user_from_username(queried_card)
+            if user:
                 userID = str(user.id)
-            except:
+            else:
                 userID = queried_card
             
             try:
@@ -2681,7 +2686,10 @@ async def help(ctx, query=None):
          "Wipes PaigeBot's AI integration memory bank. Can be used to force the AI to get back on track if it gets stuck on a topic/personality."),
 
         ("backup",
-         "Runs a manual backup of PaigeBot's files and database. This task is already executed daily.")
+         "Runs a manual backup of PaigeBot's files and database. This task is already executed daily."),
+
+        ("dailynotif `message`",
+         "Sets a `message` to be sent in the general chat at 12 PM CST daily. If `message` argument is one of `none`, `clear`, or not provided, the daily notification is deleted and disabled until set again.")
     ]
 
     # Individual help by query.
@@ -2878,6 +2886,26 @@ async def premiumga(ctx, url):
     await channel.send(embed=embed)
     await ctx.send("Premium giveaway announced!")
 
+# Daily Notifications
+
+@bot.command()
+@commands.has_any_role(role_staff, role_officers)
+async def dailynotif(ctx, *reminder):
+    reminder = ' '.join(reminder)
+
+    with open('permanent_variables.json', 'r') as outfile:
+        persistent_data = json.load(outfile)
+
+    if reminder.lower() in ["none", "clear", ""]:
+        persistent_data['24h_reminder'] = ""
+        await ctx.send(f"Cleared daily reminder!")
+    else:
+        persistent_data['24h_reminder'] = reminder
+        await ctx.send(f"Set daily reminder:\n`{reminder}`")
+    
+    with open('persistent_data.json', 'w') as f:
+        json.dump(persistent_data, f)
+
 # TASKS
 
 @tasks.loop(minutes=30)
@@ -2964,11 +2992,17 @@ async def daily_tasks():
         upload_backups()
         await cha.send(f"Backup successful! - Backup time: `{datetime.now().strftime('%d/%m/%Y %H:%M:%S')} GMT-3`")
 
+# Daily Notifications
+
 @tasks.loop(hours=1)
-async def steam_sales_daily_reminder():
+async def daily_notifier():
+    with open('permanent_variables.json', 'r') as outfile:
+        persistent_data = json.load(outfile)
+        reminder = persistent_data['24h_reminder']
+
     time = datetime.now().hour
-    if time == 14:
-        cha = bot.get_channel(general_channel)
-        await cha.send("Remember to get your free daily sticker: <https://store.steampowered.com/category/shmup>")
+    if time == 14 and reminder:
+        cha = bot.get_channel(bot_channel)
+        await cha.send(content=reminder)
 
 bot.run(TOKEN)
