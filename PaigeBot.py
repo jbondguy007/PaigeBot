@@ -1812,6 +1812,7 @@ async def tc(ctx, *args):
                 user = get_user_from_username(args[1])
                 if not user:
                     await ctx.send("User not found in database!")
+                    prevent_binder_command = False
                     return
             else:
                 user = ctx.author
