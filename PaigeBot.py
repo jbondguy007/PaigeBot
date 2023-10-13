@@ -39,6 +39,8 @@ slots_cooldown = timedelta(hours=6)
 tc_cooldown = timedelta(hours=8)
 tc_holo_rarity = 0.04
 
+prevent_binder_command = False
+
 bot_color = 0x9887ff
 
 staff_channel = 1067986921487351820
@@ -102,18 +104,23 @@ def upload_backups():
     BUCKET = 'paigebot-backups'
 
     # TRADING CARDS
-    path = 'tradingcards'
-    for subdir, dirs, files in os.walk(path):
-        for file in files:
-            full_path = os.path.join(subdir, file)
-            print(f'Uploading {file} to bucket...')
-            s3.upload_file(full_path, BUCKET, f'{path}/{file}')
+    # path = 'tradingcards'
+    # for subdir, dirs, files in os.walk(path):
+    #     for file in files:
+    #         full_path = os.path.join(subdir, file)
+    #         print(f'Uploading {file} to bucket...')
+    #         s3.upload_file(full_path, BUCKET, f'{path}/{file}')
 
     # OTHER FILES
     files = [
         'permanent_variables.json',
         'slots_checkin.json',
-        'slots_prizes.json'
+        'slots_prizes.json',
+        'bug_reports.json',
+        'tradingcards/cards.json',
+        'tradingcards/database.json',
+        'tradingcards/tc_checkin.json',
+        'tradingcards/trades.json'
     ]
 
     for file in files:
@@ -572,6 +579,8 @@ async def on_ready():
 
 @bot.event
 async def on_command_error(ctx, error):
+    global prevent_binder_command
+    prevent_binder_command = False
     print(f"ERROR: {str(error)}")
     traceback.print_exception(type(error), error, error.__traceback__)
     await ctx.send(f"<:warning:1077420799713087559> Failure to process:\n`{str(error)}`")
@@ -1781,8 +1790,6 @@ def tc_remove(user_ID, card_ID):
     with open("tradingcards/database.json", "w") as f:
         json.dump(database, f, indent=4)
 
-prevent_binder_command = False
-
 @bot.command()
 async def tc(ctx, *args):
 
@@ -2038,7 +2045,7 @@ async def tc(ctx, *args):
 
             await ctx.send(embed=embed)
 
-        elif args[0].lower() == 'accept' or args[0].lower() == 'reject':
+        elif args[0].lower() == 'accept' or args[0].lower() == 'reject' or args[0].lower() == 'cancel':
 
             with open('tradingcards/trades.json') as feedsjson:
                 trades = json.load(feedsjson)
@@ -2052,6 +2059,28 @@ async def tc(ctx, *args):
                 with open("tradingcards/trades.json", "w") as f:
                     json.dump(trades, f, indent=4)
                 await ctx.send("Trade offer rejected!")
+                return
+            
+            if args[0].lower() == 'cancel':
+                # Delete trade offer
+                try:
+                    found_trade = [{k: v} for k, v in trades.items() if str(trade_id) in v.keys()][0]
+                except:
+                    await ctx.send(f"Trade ID `{trade_id}` not found!")
+                    return
+                for outer_key, outer_value in found_trade.items():
+                    found_trade_user_id = outer_key
+                    for inner_key, inner_value in outer_value.items():
+                        found_trade_id = inner_key
+                
+                if not trades[found_trade_user_id][found_trade_id]['from'] == ctx.author.id:
+                    await ctx.send(f"Cannot cancel a trade from another user!")
+                    return
+
+                del trades[found_trade_user_id][found_trade_id]
+                with open("tradingcards/trades.json", "w") as f:
+                    json.dump(trades, f, indent=4)
+                await ctx.send("Trade offer cancelled!")
                 return
 
             # Try to fetch the trade offer
