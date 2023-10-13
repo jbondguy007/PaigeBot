@@ -2422,6 +2422,12 @@ async def tcguide(ctx):
     )
 
     embed2.add_field(
+        name="cancel trade_id",
+        value=f"*Cancel your trade offer (with ID trade_id) to another user.*",
+        inline=False
+    )
+
+    embed2.add_field(
         name="rebuild LIST-of-IDs",
         value=f"*STAFF/OFFICERS ONLY - Manually regenerates cards. Takes a single card ID, or multiple separated each by a space. Also rebuilds holo cards by appending _holo at the end of a card ID.*",
         inline=False
