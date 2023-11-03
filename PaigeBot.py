@@ -656,8 +656,12 @@ async def achievement(ctx, achievement_ids, who=None, dontgrant=False, backtrack
             json.dump(achievements_log, f, indent=4)
         
         userobj = bot.get_user(int(user))
+        if userobj:
+            userobj = userobj.name
+        else:
+            userobj = user
         
-        embed = discord.Embed(title=f"{userobj.name} has unlocked an achievement...", color=gold_color)
+        embed = discord.Embed(title=f"{userobj} has unlocked an achievement...", color=gold_color)
         embed.add_field(
             name=achievement['name'],
             value=achievement['description']
