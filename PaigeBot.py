@@ -25,6 +25,8 @@ from PIL import Image, ImageFont, ImageDraw, ImageEnhance
 from io import BytesIO
 from fractions import Fraction
 from botocore.exceptions import ClientError, NoCredentialsError
+from re import sub
+from decimal import Decimal
 
 # BOT INFO
 
@@ -40,8 +42,10 @@ tc_cooldown = timedelta(hours=8)
 tc_holo_rarity = 0.04
 
 prevent_binder_command = False
+prevent_gtp_command = False
 
 bot_color = 0x9887ff
+gold_color = 0xffff00
 
 staff_channel = 1067986921487351820
 bot_channel = 1077994256288981083
@@ -64,8 +68,11 @@ role_readers = 1082686523088048138
 role_interviewers = 1132003617046528050
 role_bots = 1067986921021788261
 role_gamenight = 1142304222176608340
+role_paigebotchangelog = 1166421373447573595
 
 jbondguy007_userID = 172522306147581952
+
+allowed_roles = [role_gamenight, role_paigebotchangelog]
 
 # TODO IF TESTING: Set to arial.ttf
 
@@ -103,29 +110,57 @@ s3 = boto3.client(
 def upload_backups():
     BUCKET = 'paigebot-backups'
 
-    # TRADING CARDS
-    # path = 'tradingcards'
-    # for subdir, dirs, files in os.walk(path):
-    #     for file in files:
-    #         full_path = os.path.join(subdir, file)
-    #         print(f'Uploading {file} to bucket...')
-    #         s3.upload_file(full_path, BUCKET, f'{path}/{file}')
+    # Empty bucket before uploading backup
+    print('Deleting files from bucket...')
+    try:
+        objects = s3.list_objects_v2(Bucket=BUCKET)['Contents']
+        if len(objects) > 0:
+            s3.delete_objects(
+                Bucket=BUCKET,
+                Delete={'Objects': [{'Key': obj['Key']} for obj in objects]}
+            )
+            print('Bucket emptied successfully.')
+        else:
+            print('Bucket is already empty.')
+    except Exception as e:
+        print(f'Error: {e}')
+
+    # Configure legacy cards to upload
+    print('Configuring legacy cards to upload...')
+    with open('tradingcards/cards.json') as feedsjson:
+        all_cards = json.load(feedsjson)
+    
+    legacy_cards = {card: details for card, details in all_cards.items() if details.get('legacy')}
+    legacy_card_image_files = []
+
+    for card_id in legacy_cards.keys():
+        legacy_card_image_files.append(f'tradingcards/generated/{card_id}.png')
 
     # OTHER FILES
     files = [
         'permanent_variables.json',
         'slots_checkin.json',
         'slots_prizes.json',
+        'slots_blacklist.json',
         'bug_reports.json',
+        'achievements.json',
+        'achievements_usersdata.json',
+        'statistics.json',
         'tradingcards/cards.json',
         'tradingcards/database.json',
         'tradingcards/tc_checkin.json',
         'tradingcards/trades.json'
     ]
 
+    print('\n')
+
     for file in files:
         print(f'Uploading {file} to bucket...')
         s3.upload_file(file, BUCKET, file)
+
+    for legacy_card_file in legacy_card_image_files:
+        print(f'Uploading {legacy_card_file} to bucket...')
+        s3.upload_file(legacy_card_file, BUCKET, legacy_card_file)
     
     print('Done!')
 
@@ -159,6 +194,16 @@ class Buttons(discord.ui.View):
             child.disabled = True
         await interaction.response.edit_message(view=self)
         await interaction.followup.send(self.prize['key'])
+        await achievement(
+            ctx=self.outer_ctx,
+            achievement_ids=[
+                'slots_accept_count_1',
+                'slots_accept_count_5',
+                'slots_accept_count_10',
+                'slots_accept_count_25',
+                'slots_accept_count_50'
+            ]
+        )
 
     @discord.ui.button(label="Redistribute", style=discord.ButtonStyle.red, custom_id="redistribute")
     async def redist(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -174,6 +219,18 @@ class Buttons(discord.ui.View):
         await self.outer_ctx.send(
             f"<@{self.outer_ctx.author.id}> has rejected the prize. `{self.prize['title']}` key for `{self.prize['platform']}` has been redistributed to the prize pool!",
             allowed_mentions=discord.AllowedMentions(users=False)
+        )
+
+        statistics("Slots prizes rejected")
+        await achievement(
+            ctx=self.outer_ctx,
+            achievement_ids=[
+                'slots_reject_count_1',
+                'slots_reject_count_5',
+                'slots_reject_count_10',
+                'slots_reject_count_25',
+                'slots_reject_count_50'
+            ]
         )
 
     @tasks.loop(seconds=1)  # Check every 1 second
@@ -407,11 +464,8 @@ def search_magazine_index(query):
     magazine_links = []
 
     for i, link in enumerate(links):
-        # print(link.get("href"))
         if link.get("href").startswith('https://steamcommunity.com/linkfilter/?url=https://heyzine.com/flip-book/'):
             magazine_links.append(link.get("href"))
-    
-    print(magazine_links)
 
     for i, issue in enumerate(issues):
 
@@ -426,16 +480,6 @@ def search_magazine_index(query):
                 return game_info
     
     return 0
-
-    # for reviewed_games in editions:
-    #     for game in reviewed_games:
-    #         if game.text.lower().strip() == query.lower().strip():
-    #             edition = editions.find("div", {"class": "bb_h1"})
-    #             print(edition)
-    #         else:
-    #             continue
-        
-    # return 0
 
 def steamID_to_name():
 
@@ -560,6 +604,83 @@ def get_user_from_username(username):
                 return member
     return False
 
+async def achievement(ctx, achievement_ids, who=None, dontgrant=False, backtrack=False):
+    if who:
+        user = str(who)
+    else:
+        user = str(ctx.author.id)
+
+    for achievement_id in achievement_ids:
+
+        with open("achievements_usersdata.json") as feedsjson:
+            achievements_log = json.load(feedsjson)
+        with open("achievements.json") as feedsjson:
+            achievements = json.load(feedsjson)
+
+        achievement = achievements[achievement_id]
+    
+        # If achievement already unlocked, return
+        try:
+            if achievements_log[user][achievement_id]['unlocked_date']:
+                continue
+        except:
+            pass
+        
+        if user not in achievements_log:
+            achievements_log[user] = {}
+        
+        # Initiate achievement
+        if achievement_id not in achievements_log[user]:
+            achievements_log[user][achievement_id] = {}
+            achievements_log[user][achievement_id]['counter'] = 0
+        
+        if backtrack and achievements_log[user][achievement_id]['counter'] > 0:
+            # Count down on achievement
+            achievements_log[user][achievement_id]['counter'] -= 1
+        else:
+            # Count up on achievement
+            achievements_log[user][achievement_id]['counter'] += 1
+
+        # If goal not reached, return
+        if not achievements_log[user][achievement_id]['counter'] == achievement['goal']:
+            with open("achievements_usersdata.json", "w") as f:
+                json.dump(achievements_log, f, indent=4)
+            continue
+    
+        if dontgrant:
+            continue
+        
+        achievements_log[user][achievement_id]['unlocked_date'] = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+
+        with open("achievements_usersdata.json", "w") as f:
+            json.dump(achievements_log, f, indent=4)
+        
+        userobj = bot.get_user(int(user))
+        
+        embed = discord.Embed(title=f"{userobj.name} has unlocked an achievement...", color=gold_color)
+        embed.add_field(
+            name=achievement['name'],
+            value=achievement['description']
+        )
+        embed.set_thumbnail(url='https://cdn3.emoji.gg/default/twitter/trophy.png')
+        
+        # Exception if this is in a DM
+        try:
+            await ctx.send(embed=embed)
+        except:
+            await ctx.channel.send(embed=embed)
+        
+        statistics("Cumulative achievements unlocked")
+
+def statistics(stat, increase=1):
+    with open("statistics.json") as feedsjson:
+        statistics = json.load(feedsjson)
+
+    statistics[stat] += increase
+
+    with open("statistics.json", "w") as f:
+        json.dump(statistics, f, indent=4)
+
 # BOT EVENTS
 
 @bot.event
@@ -570,20 +691,26 @@ async def on_ready():
     print("Ready!")
     await bot.change_presence(status=discord.Status.online,
         activity=discord.Activity(name="for prefix: p!", type=discord.ActivityType.watching))
+    
+    global glb_uptime_start, glb_stats_at_reboot
+    glb_uptime_start = datetime.now().replace(microsecond=0)
+    with open('statistics.json') as feedsjson:
+        glb_stats_at_reboot = json.load(feedsjson)
 
-    # Made into manual command due to risk of it crashing PaigeBot - RE-ENABLED
     if not bot.user.id == 823385752486412290:
         daily_tasks.start()
         check_for_new_giveaways.start()
-        # steam_sales_daily_reminder.start()
+        daily_notifier.start()
 
 @bot.event
 async def on_command_error(ctx, error):
-    global prevent_binder_command
+    global prevent_binder_command, prevent_gtp_command
     prevent_binder_command = False
+    prevent_gtp_command = False
     print(f"ERROR: {str(error)}")
     traceback.print_exception(type(error), error, error.__traceback__)
     await ctx.send(f"<:warning:1077420799713087559> Failure to process:\n`{str(error)}`")
+    await achievement(ctx=ctx, achievement_ids=['misc_failed_command'])
 
 # ON MESSAGE
 
@@ -592,19 +719,31 @@ async def on_message(message):
     
     if message.author == bot.user:
         return
+    if bot.user.id == 823385752486412290 and message.author.id not in [jbondguy007_userID, 479319946153689098, 279368230777126912, 391705444042670080]:
+        return
     
     print(f"{message.created_at} | #{message.channel} | @{message.author} | {message.content}\n")
 
     await bot.process_commands(message)
 
+    if isinstance(message.channel, discord.DMChannel):
+        await achievement(ctx=message, achievement_ids=['misc_dm'])
+    
+    if "<:dogeLUL:1071508724709081170>" in message.content:
+        statistics("Cumulative <:dogeLUL:1071508724709081170> use count")
+
 @bot.event
 async def on_command_completion(ctx):
+    await achievement(ctx=ctx, achievement_ids=['misc_first_interact'])
+    statistics("Commands count")
     if random.random() < 0.001:
         # Append a unique query parameter to the URL to prevent caching
         url = f'https://cataas.com/cat?{random.random()}'
-        embed = discord.Embed(title="Easter Egg", description="There is roughly 1 in 1000 chance of you getting a random cat picture when issuing a command. Congrats!", color=0xffff00)
+        embed = discord.Embed(title="Easter Egg", description="There is roughly 1 in 1000 chance of you getting a random cat picture when issuing a command. Congrats!", color=gold_color)
         embed.set_image(url=url)
         await ctx.send(embed=embed)
+        await achievement(ctx=ctx, achievement_ids=['misc_easter_egg_cat'])
+        statistics("Easter Egg cat triggered")
 
 @bot.event
 async def on_raw_reaction_add(payload):
@@ -640,12 +779,17 @@ async def say(ctx, channel_id, what):
 @bot.command()
 async def test(ctx):
     await ctx.send("Test successful.")
-    # await achievement(ctx=ctx, achievement=ach_test_command)
+    await achievement(ctx=ctx, achievement_ids=['misc_test_command_count_1', 'misc_test_command_count_5'])
 
-@bot.command()
+@bot.command(aliases=['about', 'status'])
 async def info(ctx):
-    await ctx.send(f"Hi, {botname} here communicating to you from <@172522306147581952>'s {platform.system()} {platform.release()}! I was born on {bot_birthdate}, and am running on Python v{platform.python_version()}.\n\nI'm happy to help, just issue the command `p!help` for a list of commands.",
+    now = datetime.now().replace(microsecond=0)
+    with open('statistics.json') as feedsjson:
+        current_stats = json.load(feedsjson)
+    commands_processed_since_reboot = current_stats['Commands count']-glb_stats_at_reboot['Commands count']
+    await ctx.send(f"Hi, {botname} here communicating to you from <@172522306147581952>'s {platform.system()} {platform.release()}! I was born on {bot_birthdate}, and am running on Python v{platform.python_version()}.\nUptime is `{now-glb_uptime_start}`. {commands_processed_since_reboot} commands have been processed since last reboot. :muscle:\n\nI'm happy to help, just issue the command `p!help` for a list of commands.",
                    allowed_mentions=discord.AllowedMentions(users=False))
+    await achievement(ctx=ctx, achievement_ids=['misc_info_command'])
 
 @bot.command()
 async def threads(ctx):
@@ -701,8 +845,6 @@ async def deadlines(ctx):
 
     embed = discord.Embed(title=f"Deadlines", description="List of all current assignments, excluding submitted or cancelled.", color=bot_color)
     embed2 = discord.Embed(title=f"Deadlines (continued...)", description="List of all current assignments, excluding submitted or cancelled.", color=bot_color)
-
-    # print(len(deadlines))
 
     for assignment in deadlines[:25]:
 
@@ -822,6 +964,8 @@ async def poll(ctx, content, *choices):
 
     for reaction in reactions[:len(choices)]:
         await embed_message.add_reaction(reaction)
+    
+    statistics("Polls created")
 
 @bot.command()
 async def convert(ctx, amount, from_currency, to_currency):
@@ -920,8 +1064,6 @@ async def game(ctx, AppID, price=None):
 
     optional_premium_threshold = 4000
     mandatory_premium_threshold = 8000
-
-    # if game:
 
     if not game['price_overview']['currency'] == 'CAD':
         await ctx.send(f"Unable to determine price score as the Steam API returned the incorrect currency. (Expected `CAD`, got `{game['price_overview']['currency']}`)\nPlease wait before trying again, or issue the command along with the pricing (in CAD for more accurate results):\n`game {AppID} 00.00` (Any format is accepted, but must include all digits including cents)")
@@ -1027,6 +1169,19 @@ async def ai(ctx, *query):
 
     await msg.edit(content=message)
 
+    statistics("AI messages generated")
+    
+    await achievement(
+        ctx=ctx,
+        achievement_ids=[
+            'ai_chat_count_1',
+            'ai_chat_count_10',
+            'ai_chat_count_25',
+            'ai_chat_count_50',
+            'ai_chat_count_100'
+        ]
+    )
+
 @bot.command()
 async def profile(ctx, *query):
     query = ' '.join(query)
@@ -1097,6 +1252,23 @@ def checkin_check(ctx, file='slots_checkin.json', cooldown=slots_cooldown):
 @bot.command()
 async def slots(ctx):
 
+    if len(ctx.author.roles) <= 1 or not [role.id for role in ctx.author.roles if role.id not in allowed_roles]:
+        await ctx.send("Hi, welcome to Paige's Casino! Unfortunately, we require a credit check (having a staff-assigned role) before you can enter. Contact staff for assistance. Thank you!")
+        return
+    
+    with open('slots_blacklist.json') as feedsjson:
+        blacklist = json.load(feedsjson)
+
+    if ctx.author.id in blacklist:
+        responses = ["Sorry, it looks like you are barred from PaigeCasino.", "I'm afraid you are banned from PaigeCasino. Have a good day.", "Dear guest, it appears that PaigeCasino has banned you from the premises."]
+        response = random.choice(responses)
+        await ctx.send(f"*The Bouncer at the door checks your ID...* \"{response}\" (User is banned from `slots` command)")
+        return
+
+    cherry = ':cherries:'
+    orange = ':tangerine:'
+    lemon = ':lemon:'
+
     if not ctx.guild:
         await ctx.send("The `slots` commands cannot be executed from Direct Messages.")
         return
@@ -1105,10 +1277,6 @@ async def slots(ctx):
     if os.path.getsize('slots_prizes.json') <= 2:
         await ctx.send("Unfortunately, the prize pool is currently empty. Try again another time!\nConsider donating a prize to the pool via the `slotskey` command.")
         return
-
-    cherry = ':cherries:'
-    orange = ':tangerine:'
-    lemon = ':lemon:'
 
     allowed, cooldown = checkin_check(ctx)
 
@@ -1130,6 +1298,24 @@ async def slots(ctx):
     # If not all emojis match
     if not all(element == slots_result[0] for element in slots_result):
         await ctx.send("Better luck next time...")
+
+        statistics("Slots plays")
+
+        await achievement(
+                ctx=ctx,
+                achievement_ids=[
+                    'slots_play_count_1',
+                    'slots_play_count_5',
+                    'slots_play_count_10',
+                    'slots_play_count_25',
+                    'slots_play_count_50',
+                    'slots_play_count_100'
+                ]
+            )
+        
+        if len(slots_result) == len(set(slots_result)):
+            await achievement(ctx=ctx, achievement_ids=['slots_misc_all_different_symbols'])
+
         return
     
     # If all emojis match
@@ -1150,6 +1336,33 @@ async def slots(ctx):
             f"<@{ctx.author.id}> has won... `{prize['title']}` key for `{prize['platform']}`! Please remember to thank <@{prize['user']}>!",
             allowed_mentions=discord.AllowedMentions(users=False)
         )
+    
+    statistics("Slots plays")
+    
+    await achievement(
+        ctx=ctx,
+        achievement_ids=[
+            'slots_play_count_1',
+            'slots_play_count_5',
+            'slots_play_count_10',
+            'slots_play_count_25',
+            'slots_play_count_50',
+            'slots_play_count_100'
+        ]
+    )
+
+    statistics("Slots wins")
+    
+    await achievement(
+        ctx=ctx,
+        achievement_ids=[
+            'slots_win_count_1',
+            'slots_win_count_5',
+            'slots_win_count_10',
+            'slots_win_count_25',
+            'slots_win_count_50'
+        ]
+    )
     
     await ctx.author.send(f"Congratulations on winning at PaigeSlots! You've won a key for `{prize['title']}` (activates on `{prize['platform']}`)")
     view=Buttons(prize, feeds, ctx=ctx)
@@ -1207,7 +1420,9 @@ async def slotskey(ctx, *, args:commands.clean_content(fix_channel_mentions=Fals
 
     await ctx.send("Key added to prize pool! Thanks for your contribution!")
 
-@bot.command()
+    statistics("Slots prizes contributed")
+
+@bot.command(aliases=['slotprize', 'slotsprize', 'slotprizes'])
 async def slotsprizes(ctx):
     # Load json data
     with open("slots_prizes.json") as feedsjson:
@@ -1479,9 +1694,33 @@ async def poker(ctx, opponent : discord.Member):
     if opponent_hand['rank'] > challenger_hand['rank']:
         await ctx.send(f"{opponent.name} wins with a {opponent_hand['name']} over {challenger.name}'s {challenger_hand['name']}!")
 
+        await achievement(
+            ctx=ctx,
+            achievement_ids=[
+                'poker_win_count_1',
+                'poker_win_count_5',
+                'poker_win_count_10',
+                'poker_win_count_25',
+                'poker_win_count_50'
+            ],
+            who=opponent.id
+        )
+
     # Elif challenger hand rank is greater
     elif opponent_hand['rank'] < challenger_hand['rank']:
         await ctx.send(f"{challenger.name} wins with a {challenger_hand['name']} over {opponent.name}'s {opponent_hand['name']}!")
+        
+        await achievement(
+            ctx=ctx,
+            achievement_ids=[
+                'poker_win_count_1',
+                'poker_win_count_5',
+                'poker_win_count_10',
+                'poker_win_count_25',
+                'poker_win_count_50'
+            ],
+            who=challenger.id
+        )
 
     # Elif both hand ranks are the same
     elif opponent_hand['rank'] == challenger_hand['rank']:
@@ -1492,9 +1731,34 @@ async def poker(ctx, opponent : discord.Member):
             # Determine winning hand by score
             if opponent_hand['score'] > challenger_hand['score']:
                 await ctx.send(f"{opponent.name} wins with a {opponent_hand['name']} of higher value!")
-                return
+                
+                await achievement(
+                    ctx=ctx,
+                    achievement_ids=[
+                        'poker_win_count_1',
+                        'poker_win_count_5',
+                        'poker_win_count_10',
+                        'poker_win_count_25',
+                        'poker_win_count_50'
+                    ],
+                    who=opponent.id
+                )
+                
             elif opponent_hand['score'] < challenger_hand['score']:
                 await ctx.send(f"{challenger.name} wins with a {challenger_hand['name']} of higher value!")
+
+                await achievement(
+                    ctx=ctx,
+                    achievement_ids=[
+                        'poker_win_count_1',
+                        'poker_win_count_5',
+                        'poker_win_count_10',
+                        'poker_win_count_25',
+                        'poker_win_count_50'
+                    ],
+                    who=challenger.id
+                )
+
                 return
 
         # Fallthrough (BUST or HIGH VALUES)
@@ -1504,9 +1768,77 @@ async def poker(ctx, opponent : discord.Member):
             player = challenger
         else:
             await ctx.send(f"Perfect draw!")
+
+            statistics("Dice Poker perfect draws")
+
+            await achievement(ctx=ctx, achievement_ids=['poker_misc_perfect_draw'], who=challenger.id)
+            await achievement(ctx=ctx, achievement_ids=['poker_misc_perfect_draw'], who=opponent.id)
+
             return
 
         await ctx.send(f"{player} wins with High Values!")
+
+        await achievement(ctx=ctx, achievement_ids=['poker_misc_win_on_higher_val'], who=player.id)
+
+        await achievement(
+                ctx=ctx,
+                achievement_ids=[
+                    'poker_win_count_1',
+                    'poker_win_count_5',
+                    'poker_win_count_10',
+                    'poker_win_count_25',
+                    'poker_win_count_50'
+                ],
+                who=player.id
+            )
+        
+    statistics("Dice Poker games played")
+    
+    await achievement(
+        ctx=ctx,
+        who=challenger.id,
+        achievement_ids=[
+            'poker_play_count_1',
+            'poker_play_count_5',
+            'poker_play_count_10',
+            'poker_play_count_25',
+            'poker_play_count_50',
+            'poker_play_count_100'
+        ]
+    )
+
+    await achievement(
+        ctx=ctx,
+        who=opponent.id,
+        achievement_ids=[
+            'poker_play_count_1',
+            'poker_play_count_5',
+            'poker_play_count_10',
+            'poker_play_count_25',
+            'poker_play_count_50',
+            'poker_play_count_100'
+        ]
+    )
+
+    for h, p in [(opponent_hand, opponent), (challenger_hand, challenger)]:
+        if h['score'] == 30:
+            await achievement(ctx=ctx, who=p.id, achievement_ids=['poker_hand_5ok_highest'])
+        if h['rank'] == 8:
+            await achievement(ctx=ctx, who=p.id, achievement_ids=['poker_hand_5ok'])
+        if h['rank'] == 7:
+            await achievement(ctx=ctx, who=p.id, achievement_ids=['poker_hand_4ok'])
+        if h['rank'] == 6:
+            await achievement(ctx=ctx, who=p.id, achievement_ids=['poker_hand_fh'])
+        if h['rank'] == 5:
+            await achievement(ctx=ctx, who=p.id, achievement_ids=['poker_hand_straight'])
+        if h['rank'] == 4:
+            await achievement(ctx=ctx, who=p.id, achievement_ids=['poker_hand_3ok'])
+        if h['rank'] == 3:
+            await achievement(ctx=ctx, who=p.id, achievement_ids=['poker_hand_2p'])
+        if h['rank'] == 2:
+            await achievement(ctx=ctx, who=p.id, achievement_ids=['poker_hand_1p'])
+        if h['rank'] == 1:
+            await achievement(ctx=ctx, who=p.id, achievement_ids=['poker_hand_bust'])
 
 @bot.command()
 async def pokerguide(ctx):
@@ -1519,25 +1851,25 @@ async def pokerguide(ctx):
     embed.add_field(
         name="Hands",
         value="""The possible hands are as follow, ranking best to worse:
-        Five of a Kind (**AAAAA**)
-        Four of a Kind (**AAAA**B)
-        Full House (**AABBB**)
-        Straight (**ABCDEF**)
-        Three of a Kind (**AAA**BC)
-        Two Pairs (**AABB**C)
-        One Pair (**AA**BCD)
-        Bust (No hand)
+Five of a Kind (**AAAAA**)
+Four of a Kind (**AAAA**B)
+Full House (**AABBB**)
+Straight (**ABCDEF**)
+Three of a Kind (**AAA**BC)
+Two Pairs (**AABB**C)
+One Pair (**AA**BCD)
+Bust (No hand)
         """,
         inline=False
     )
     embed.add_field(
         name="Commands",
         value=f"""`!r` - Roll all 5 dice.
-        `!r 1 2 4` - Reroll the 1st, 2nd, and 4th dice.
-        `!k` - Keeps all 5 dice.
-        `!k 3 5` - Keeps 3rd and 5th dice, reroll everything else.
-        `{prefixes[0]}poker @user` - Challenges `@user` to a game of Dice Poker.
-        `!accept` - Accept a Poker Dice challenge.
+`!r 1 2 4` - Reroll the 1st, 2nd, and 4th dice.
+`!k` - Keeps all 5 dice.
+`!k 3 5` - Keeps 3rd and 5th dice, reroll everything else.
+`{prefixes[0]}poker @user` - Challenges `@user` to a game of Dice Poker.
+`!accept` - Accept a Poker Dice challenge.
         """,
         inline=False
     )
@@ -1564,21 +1896,44 @@ def tc_role(user):
     else:
         return("Ordinary", user_role)
 
-def tc_generator(user, holo=True):
+def tc_generator(user, holo=True, legacy=False):
     print(f"Generating card {user}...")
+
+    if legacy:
+        base_img = Image.open(f"tradingcards/generated/{user}{'_holo' if holo else''}.png").convert('RGBA') # WORKING ON TODO
+        contrast = ImageEnhance.Contrast(base_img)
+        base_img = contrast.enhance(0.6)
+
+        # Fonts setup
+        font = ImageFont.truetype(chosen_font, 50)
+        draw = ImageDraw.Draw(base_img)
+
+        font_width, font_height = font.getsize("LEGACY")
+
+        # LEGACY text
+        draw.text((50, 200-font_height), "LEGACY", font=font, fill="black", stroke_width=3, stroke_fill="white")
+
+        # Save the resulting image
+        card = f"{user}{'_holo' if holo else ''}"
+        base_img.save(f'tradingcards/generated/{card}.png')
+
+        return card
+
     pfp = user.avatar
     rarity, role = tc_role(user)
     user_join_date = user.joined_at.strftime("%m/%d/%Y")
 
     # Setup a base image
-    base_img  = Image.new( mode = "RGBA", size = (300, 400) )
+    base_img = Image.new( mode = "RGBA", size = (300, 400) )
 
     # Open the profile picture image
     try:
         response = requests.get(pfp)
         img = Image.open(BytesIO(response.content)).convert('RGBA')
     except:
-        img = Image.open('tradingcards/templates/default_pfp.png').convert('RGBA')
+        response = requests.get(user.display_avatar)
+        img = Image.open(BytesIO(response.content)).convert('RGBA')
+        # img = Image.open('tradingcards/templates/default_pfp.png').convert('RGBA')
     profile_img = img.resize( size=(260, 260) )
 
     # Open the card template and holo images
@@ -1591,12 +1946,11 @@ def tc_generator(user, holo=True):
 
     # Setup for holo cards
     if holo:
-        # base_img = Image.blend(base_img, holo_img, .3)
         base_img = Image.alpha_composite(base_img, holo_img)
         contrast = ImageEnhance.Contrast(base_img)
         base_img = contrast.enhance(1.2)
-        # brightness = ImageEnhance.Brightness(base_img)
-        # base_img = brightness.enhance(1.2)
+
+    # Setup for legacy cards
 
     # Fonts setup
     font = ImageFont.truetype(chosen_font, 17)
@@ -1608,7 +1962,7 @@ def tc_generator(user, holo=True):
     draw.text(((300-w)/2, 16), f"{user.name}{' (HOLO)' if holo else ''}", font=font, fill="black", stroke_width=3, stroke_fill="#AAFFFF" if holo else "white")
 
     # Card rarity/holo text
-    draw.text((30, 60), '{0}\n{1}'.format(rarity, 'HOLO' if holo else ''), font=font, fill="#55FFFF" if holo else "yellow", stroke_width=2, stroke_fill="black")
+    draw.text((30, 60), '{0}{1}{2}'.format(rarity, '\nHOLO' if holo else '', '\nLEGACY' if legacy else ''), font=font, fill="#55FFFF" if holo else "yellow", stroke_width=2, stroke_fill="black")
 
     # Card details text
     draw.text((25, 325), f"Role: {role.name}\nJoin Date: {user_join_date}\nRarity: {rarity}\nID: {user.id}{'_holo' if holo else ''}", font=font_small, fill="black")
@@ -1682,9 +2036,23 @@ def fetch_player_collection(user):
     
     return player_collection
 
-def binder_generator(user):
+def binder_generator(user, include_legacy=False, only_legacy=False):
 
-    player_collection = fetch_player_collection(user)
+    fetched_player_collection = fetch_player_collection(user)
+
+    normal_collection = {x: y for x, y in fetched_player_collection.items() if not y.get('legacy')}
+    legacy_collection = {x: y for x, y in fetched_player_collection.items() if y.get('legacy')}
+
+    if include_legacy:
+        normal_collection.update(legacy_collection)
+        player_collection = normal_collection
+    elif only_legacy:
+        player_collection = legacy_collection
+    else:
+        player_collection = normal_collection
+
+    if not player_collection:
+        raise Exception("Empty binder")
 
     x = 0
     y = 0
@@ -1743,7 +2111,7 @@ def binder_generator(user):
 
     return returned_value
 
-def tc_add(user_ID, card_ID):
+async def tc_add(user_ID, card_ID, ctx):
 
     player = str(user_ID)
 
@@ -1765,8 +2133,52 @@ def tc_add(user_ID, card_ID):
     # Dump data back to json file
     with open("tradingcards/database.json", "w") as f:
         json.dump(database, f, indent=4)
+    
+    await achievement(
+        ctx=ctx,
+        who=user_ID,
+        backtrack=False,
+        achievement_ids=[
+            'tc_normal_count_1',
+            'tc_normal_count_5',
+            'tc_normal_count_10',
+            'tc_normal_count_25',
+            'tc_normal_count_50',
+            'tc_normal_count_100'
+        ]
+    )
 
-def tc_remove(user_ID, card_ID):
+    if '_holo' in card_ID:
+        await achievement(
+            ctx=ctx,
+            who=user_ID,
+            backtrack=False,
+            achievement_ids=[
+                'tc_holo_count_1',
+                'tc_holo_count_5',
+                'tc_holo_count_10',
+                'tc_holo_count_25',
+                'tc_holo_count_50'
+            ]
+        )
+
+    # tc_misc_getself
+    if user_ID == re.search("\d+", card_ID)[0]:
+        await achievement(ctx=ctx, achievement_ids=['tc_misc_getself'])
+    
+    # tc_misc_getdup
+    if database[player][card_ID]['count'] > 1:
+        await achievement(ctx=ctx, achievement_ids=['tc_misc_getdup'])
+
+    #tc_misc_same_normalholo
+    if (
+        '_holo' in card_ID and database[player].get(card_ID.replace('_holo', '')) or
+        database[player].get(card_ID+'_holo')
+        ):
+            await achievement(ctx=ctx, achievement_ids=['tc_misc_same_normalholo'])
+
+
+async def tc_remove(user_ID, card_ID, ctx):
 
     player = str(user_ID)
 
@@ -1789,6 +2201,65 @@ def tc_remove(user_ID, card_ID):
     # Dump data back to json file
     with open("tradingcards/database.json", "w") as f:
         json.dump(database, f, indent=4)
+    
+    await achievement(
+        ctx=ctx,
+        who=user_ID,
+        backtrack=True,
+        achievement_ids=[
+            'tc_normal_count_1',
+            'tc_normal_count_5',
+            'tc_normal_count_10',
+            'tc_normal_count_25',
+            'tc_normal_count_50',
+            'tc_normal_count_100'
+        ]
+    )
+
+    if '_holo' in card_ID:
+        await achievement(
+            ctx=ctx,
+            who=user_ID,
+            backtrack=True,
+            achievement_ids=[
+                'tc_holo_count_1',
+                'tc_holo_count_5',
+                'tc_holo_count_10',
+                'tc_holo_count_25',
+                'tc_holo_count_50'
+            ]
+        )
+
+async def tc_legacy_check():
+    with open('tradingcards/cards.json') as feedsjson:
+        all_cards = json.load(feedsjson)
+    
+    SGM_guild = bot.get_guild(1067986921021788260)
+    server_members = [str(user.id) for user in SGM_guild.members]
+
+    legacy_cards = [card for card, info in all_cards.items() if card not in server_members and card not in [card+'_holo' for card in server_members] and not info.get('legacy')]
+    unlegacy_cards = [card for card, info in all_cards.items() if (card in server_members or card in [card+'_holo' for card in server_members]) and info.get('legacy')]
+
+    for lc in legacy_cards:
+        all_cards[lc]['legacy'] = True
+        lc_holo = False
+        if lc.endswith('_holo'):
+            lc = lc.replace('_holo', '')
+            lc_holo = True
+        tc_generator(lc, holo=lc_holo, legacy=True)
+    
+    for lc in unlegacy_cards:
+        del all_cards[lc]['legacy']
+        lc_holo = False
+        if lc.endswith('_holo'):
+            lc = lc.replace('_holo', '')
+            lc_holo = True
+        tc_generator(lc, holo=lc_holo, legacy=False)
+    
+    with open("tradingcards/cards.json", "w") as f:
+        json.dump(all_cards, f, indent=4)
+    
+    return legacy_cards, unlegacy_cards
 
 @bot.command()
 async def tc(ctx, *args):
@@ -1806,8 +2277,10 @@ async def tc(ctx, *args):
             database = json.load(feedsjson)
         with open('tradingcards/cards.json') as feedsjson:
             all_cards = json.load(feedsjson)
+        
+        undiscovered_cards = [user for user in ctx.guild.members if str(user.id) not in [user for user in all_cards.keys()]]
 
-        if args[0].lower() == 'binder':
+        if args[0].lower() in ['binder', 'binder+', 'binderplus', 'legacybinder']:
             global prevent_binder_command
             if prevent_binder_command:
                 await ctx.send(f"<@{ctx.author.id}> Processing a binder already, please wait and try again later.")
@@ -1824,8 +2297,16 @@ async def tc(ctx, *args):
             else:
                 user = ctx.author
 
+            include_legacy = False
+            only_legacy = False
+
+            if args[0].lower() in ['binder+', 'binderplus']:
+                include_legacy = True
+            elif args[0].lower() == 'legacybinder':
+                only_legacy = True
+
             try:
-                binders = binder_generator(user.id)
+                binders = binder_generator(user.id, include_legacy=include_legacy, only_legacy=only_legacy)
             except:
                 await ctx.send("Empty binder!")
                 prevent_binder_command = False
@@ -1841,8 +2322,9 @@ async def tc(ctx, *args):
             
             prevent_binder_command = False
         
-        elif args[0].lower() == 'list' or args[0].lower() == 'dups':
+        elif args[0].lower() in ['list', 'list+', 'listplus', 'legacylist', 'dups', 'collection', 'missing']:
             
+            # Handling if a username is passed as argument
             if len(args) > 1:
                 user = get_user_from_username(args[1])
                 if not user:
@@ -1854,40 +2336,92 @@ async def tc(ctx, *args):
             if not str(user.id) in database:
                 await ctx.send(f"No cards found for {user.name}! Try claiming some with `{prefixes[0]}tc` first!")
                 return
+            # ----------
 
             player_collection = fetch_player_collection(str(user.id))
 
-            batch_size = 25
+            if args[0].lower() == 'list':
+                player_collection = {card: info for card, info in player_collection.items() if not info.get('legacy')}
+            
+            if args[0].lower() == 'legacylist':
+                player_collection = {card: info for card, info in player_collection.items() if info.get('legacy')}
+
+            if args[0].lower() == 'collection':
+                player_rarities_count = Counter([card_info['rarity'] for card_info in player_collection.values() if not card_info.get('legacy') and not card_info.get('holo')])
+                all_rarities_count = Counter([card_info['rarity'] for card_info in all_cards.values() if not card_info.get('legacy') and not card_info.get('holo')])
+
+                rarities_text = ['Ultra Ultra Rare', 'Ultra Rare', 'Rare', 'Exceptional', 'Uncommon', 'Common', 'Ordinary']
+                
+                server_members = [x for x in ctx.guild.members]
+
+                if undiscovered_cards:
+                    desc = f" ***{len(undiscovered_cards)}** cards have not yet been discovered by the community, and are not included in your progress for each rarity.*"
+                else:
+                    desc = ""
+
+                embed = discord.Embed(title=f"{user.name}'s Collection", description=f"*Excludes HOLO variants and legacy cards.*{desc}", color=bot_color)
+
+                player_rarities_count_combined = sum(player_rarities_count.values())
+
+                embed.add_field(
+                    name=f"Progress: {player_rarities_count_combined}/{len(server_members)}",
+                    value="",
+                    inline=False
+                )
+
+                for rar in rarities_text:
+                    embed.add_field(
+                        name="",
+                        value=f"**{player_rarities_count[rar]}/{all_rarities_count[rar]}** - {rar}",
+                        inline=False
+                    )
+                
+                await ctx.send(embed=embed)
+                return
+
+            if args[0].lower() == 'missing':
+                player_collection = {k: v for k, v in all_cards.items() if k not in player_collection.keys() and not v['holo'] and not v.get('legacy')}
 
             if args[0].lower() == 'dups':
                 player_collection = {k: v for k, v in player_collection.items() if v['count'] > 1}
+                if not player_collection:
+                    await ctx.send(f"No duplicate cards found for user {user.name}!")
+                    return
+                
+            undiscovered_cards = {user.id: {'name': user.name, 'holo': False, 'rarity': '(Undiscovered)'} for user in ctx.guild.members if str(user.id) not in [user for user in all_cards.keys()]}
             
-            if not player_collection:
-                await ctx.send(f"No duplicate cards found for user {user.name}!")
-                return
+            player_collection = tc_sorter(player_collection)
+
+            if args[0].lower() == 'missing':
+                player_collection.update(undiscovered_cards)
+                if not player_collection:
+                    await ctx.send(f"No missing cards found for user {user.name}!")
+                    return
 
             keys = list(player_collection.keys())
             collection_size = len(keys)
+            batch_size = 25
 
             for i in range(0, collection_size, batch_size):
-                embed = discord.Embed(title=f"{user.name}'s {'Duplicate ' if args[0].lower() == 'dups' else ''}Cards List", color=bot_color)
+                embed = discord.Embed(title=f"{user.name}'s {'Duplicate ' if args[0].lower() == 'dups' else ''}{'Missing ' if args[0].lower() == 'missing' else ''}{'Legacy ' if args[0].lower() == 'legacylist' else ''}Cards List{' (+Legacy)' if args[0].lower() in ['list+', 'listplus'] else ''}", color=bot_color)
 
                 batch_keys = keys[i:i + batch_size]
                 batch_dict = {key: player_collection[key] for key in batch_keys}
 
                 for cardID, card in batch_dict.items():
+                    if args[0].lower() == 'missing':
+                        cards_count = ''
+                    else:
+                        cards_count = card['count']
                     embed.add_field(
                         name=f"{card['name']}{' (HOLO)' if card['holo'] else ''}",
-                        value=f"{cardID}\n{card['rarity']}\nCount: {card['count']}",
+                        value=f"{cardID}\n{card['rarity']}{' (LEGACY)' if card.get('legacy') else ''}\n{cards_count}",
                         inline=True
                     )
-                
-
                 
                 await ctx.send(embed=embed)
 
         elif args[0].lower() == 'view':
-
             try:
                 queried_card = args[1]
             except:
@@ -1911,14 +2445,66 @@ async def tc(ctx, *args):
             except:
                 await ctx.send(f"Unable to locate card `{args[1]}` as it does not exist in the database, possibly because it has not yet been discovered by anyone yet.")
                 return
+            
+            try:
+                viewed_card_count = database[str(ctx.author.id)][cardID]['count']
+            except:
+                viewed_card_count = "None"
 
             # Prep and send the embed
             file = discord.File(f"tradingcards/generated/{cardID}.png")
-            embed = discord.Embed(title=f"{card['name']}{' (HOLO)' if card['holo'] else ''}", description=f"ID: {cardID}", color=bot_color)
+            embed = discord.Embed(title=f"{card['name']}{' (HOLO)' if card['holo'] else ''}", description=f"ID: {cardID}\nCount You Own: {viewed_card_count}", color=bot_color)
             embed.set_image(url=f"attachment://{cardID}.png")
 
             await ctx.send(embed=embed, file=file)
             return
+        
+        elif args[0].lower() == 'whohas' or args[0].lower() == 'whohasany':
+            whohasany = False
+            if args[0].lower() == 'whohasany':
+                whohasany = True
+            try:
+                queried_card = args[1]
+            except:
+                await ctx.send(f"Command is `{prefixes[0]}tc whohas card-ID-here`")
+                return
+            
+            is_holo = False
+            if queried_card.endswith(' (HOLO)') or queried_card.endswith('_holo'):
+                queried_card = queried_card.replace(' (HOLO)', '')
+                queried_card = queried_card.replace('_holo', '')
+                is_holo = True
+
+            user = get_user_from_username(queried_card)
+            if user:
+                userID = str(user.id)
+            else:
+                userID = queried_card
+            
+            try:
+                cardID = userID+('_holo' if is_holo else '')
+                card = all_cards[cardID]
+            except:
+                await ctx.send(f"Unable to locate card `{args[1]}` as it does not exist in the database, possibly because it has not yet been discovered by anyone yet.")
+                return
+            
+            if whohasany:
+                whohas_users = [user_id for user_id, cards in database.items() if cardID in [crd for crd, val in cards.items()]]
+            else:
+                whohas_users = [user_id for user_id, cards in database.items() if cardID in [crd for crd, val in cards.items() if val['count'] > 1]]
+
+            embed = discord.Embed(title=f"Owners of{' Any' if whohasany else ' Duplicate'} `{card['name']}{' (HOLO)' if is_holo else''}` Cards", color=bot_color)
+            
+            for u in whohas_users:
+                embed.add_field(
+                    name=bot.get_user(int(u)).name,
+                    value=f"Count: {database[u][cardID]['count']}\n<@{bot.get_user(int(u)).id}>"
+                )
+            
+            if not whohas_users:
+                await ctx.send(f"Unable to locate user owning a duplicate `{args[1]}` card!")
+            else:
+                await ctx.send(embed=embed)
         
         elif args[0].lower() == 'offer':
 
@@ -1993,11 +2579,11 @@ async def tc(ctx, *args):
                 await ctx.send("You have no trading cards trade offers pending.")
                 return
             
-            embed = discord.Embed(title=f"{ctx.author.name}'s Trade Offers", description=f"Issue the command `{prefixes[0]}tc accept trade-ID` to accept trades, or `{prefixes[0]}tc reject trade-ID` to reject them.")
+            embed = discord.Embed(title=f"{ctx.author.name}'s Trade Offers", description=f"Issue the command `{prefixes[0]}tc accept trade-ID` to accept trades, or `{prefixes[0]}tc reject trade-ID` to reject them.", color=bot_color)
 
             trades_for_deletion = []
 
-            for tradeID, details in user_trades.items():
+            for i, (tradeID, details) in enumerate(user_trades.items()):
                 
                 # EXAMPLE:
                     # tradeID: 1142364330424279111
@@ -2026,9 +2612,24 @@ async def tc(ctx, *args):
                     trades_for_deletion.append(tradeID)
                     continue
 
+                have_requested = database[str(user)].get(requested_card_ID, '')
+                have_given = database[str(user)].get(given_card_ID, '')
+
+                if have_requested:
+                    have_requested = have_requested['count']
+                else:
+                    have_requested = 0
+                
+                if have_given:
+                    have_given = have_given['count']
+                else:
+                    have_given = 0
+
                 embed.add_field(
-                    name=f"Trade ID: {tradeID}",
-                    value=f"From: <@{trader}>\n[H]: {given_card['name']}{' (HOLO)' if given_card['holo'] else ''}\n[W]: {requested_card['name']}{' (HOLO)' if requested_card['holo'] else ''}",
+                    name=f"{i+1}. Trade ID: {tradeID}",
+                    value=f"""From: <@{trader}>
+[H]: {given_card['name']}{' (HOLO)' if given_card['holo'] else ''} - {given_card['rarity']} (you have {have_given})
+[W]: {requested_card['name']}{' (HOLO)' if requested_card['holo'] else ''} - {requested_card['rarity']} (you have {have_requested})""",
                     inline=False
                 )
             
@@ -2050,89 +2651,148 @@ async def tc(ctx, *args):
             with open('tradingcards/trades.json') as feedsjson:
                 trades = json.load(feedsjson)
             
+            trade_id_is_index = False
+
             trade_id = args[1]
+            if len(trade_id) <= 2:
+                trade_id_is_index = True
+                
             user_id = str(ctx.author.id)
 
             if args[0].lower() == 'reject':
+                try:
+                    if trade_id_is_index:
+                        trade_item = {key: val for idx, (key, val) in enumerate(trades[user_id].items()) if idx == int(trade_id)-1}
+                        if not trade_item:
+                            raise Exception()
+                    else:
+                        trade_item = {trade_id: trades[user_id][trade_id]}
+                except:
+                    await ctx.send(f"No pending trade with trade ID or index `{trade_id}` found!")
+                    return
+                
+                print(trade_item)
+
                 # Delete trade offer
-                del trades[user_id][trade_id]
-                with open("tradingcards/trades.json", "w") as f:
-                    json.dump(trades, f, indent=4)
-                await ctx.send("Trade offer rejected!")
+                for tradeid, val in trade_item.items():
+                    rejected_trade_sender_id = val['from']
+                    del trades[user_id][tradeid]
+                    with open("tradingcards/trades.json", "w") as f:
+                        json.dump(trades, f, indent=4)
+                    await ctx.send(f"Trade offer `{tradeid}` from <@{rejected_trade_sender_id}> rejected!")
+
+                statistics("Trading Cards trades rejected")
+
+                await achievement(
+                    ctx=ctx,
+                    achievement_ids=[
+                        'tc_trade_reject_count_1',
+                        'tc_trade_reject_count_5',
+                        'tc_trade_reject_count_10'
+                    ]
+                )
                 return
             
             if args[0].lower() == 'cancel':
-                # Delete trade offer
-                try:
-                    found_trade = [{k: v} for k, v in trades.items() if str(trade_id) in v.keys()][0]
-                except:
+                # Check each user, trades pair
+                for c_user, c_offers in trades.items():
+                    # If the trade_id matches any of the trade IDs for this user
+                    if trade_id in c_offers:
+                        # Assign values to variables
+                        found_trade = c_offers[trade_id]
+                        found_trade_user_id = c_user
+                        # Terminate loop
+                        break
+                    # If no match, set found_trade to None, and continue loop
+                    else:
+                        found_trade = None
+                        continue
+                
+                # If no trades match, terminate
+                if not found_trade:
                     await ctx.send(f"Trade ID `{trade_id}` not found!")
                     return
-                for outer_key, outer_value in found_trade.items():
-                    found_trade_user_id = outer_key
-                    for inner_key, inner_value in outer_value.items():
-                        found_trade_id = inner_key
                 
-                if not trades[found_trade_user_id][found_trade_id]['from'] == ctx.author.id:
+                # If user is trying to cancel another user's trade, terminate
+                if not trades[found_trade_user_id][trade_id]['from'] == ctx.author.id:
                     await ctx.send(f"Cannot cancel a trade from another user!")
                     return
 
-                del trades[found_trade_user_id][found_trade_id]
+                # Delete trade
+                del trades[found_trade_user_id][trade_id]
                 with open("tradingcards/trades.json", "w") as f:
                     json.dump(trades, f, indent=4)
-                await ctx.send("Trade offer cancelled!")
-                return
+                await ctx.send(f"Trade offer `{trade_id}` to <@{found_trade_user_id}> has been cancelled!")
 
-            # Try to fetch the trade offer
-            try:
-                trade = trades[user_id][trade_id]
-            except:
-                await ctx.send(f"No pending trade with trade ID `{trade_id}` found!")
+                statistics("Trading Cards trades cancelled")
+
+                await achievement(
+                    ctx=ctx,
+                    achievement_ids=[
+                        'tc_trade_cancel_count_1',
+                        'tc_trade_cancel_count_5',
+                        'tc_trade_cancel_count_10'
+                    ]
+                )
                 return
             
-            trader_id = str(trade['from'])
-            trader = ctx.guild.get_member(int(trader_id))
+            # ----- END TRADE CANCELATION ----- #
 
-            requested_cardID = trade['want']
-            given_cardID = trade['have']
-
-            requested_card = all_cards[requested_cardID]
-            given_card = all_cards[given_cardID]
-
-            received = f"{given_card['name']}{' (HOLO)' if given_card['holo'] else ''}"
-            traded_away = f"{requested_card['name']}{' (HOLO)' if requested_card['holo'] else ''}"
-
-            # Check if the tradee's card is still available for trading
             try:
-                deliver = database[str(user_id)][requested_cardID]
-            except Exception as error:
-                print(error)
-                await ctx.send(f"Trade failed! {ctx.author.name} no longer has card `{traded_away}`.")
-                # Delete trade offer
-                del trades[user_id][trade_id]
-                with open("tradingcards/trades.json", "w") as f:
-                    json.dump(trades, f, indent=4)
+                if trade_id_is_index:
+                    trade_item = {key: val for idx, (key, val) in enumerate(trades[user_id].items()) if idx == int(trade_id)-1}
+                else:
+                    trade_item = {trade_id: trades[user_id][trade_id]}
+                if not trade_item:
+                    raise Exception()
+            except:
+                await ctx.send(f"No pending trade with trade ID or index `{trade_id}` found!")
                 return
+            
+            for trade_id, trade in trade_item.items():
+                trader_id = str(trade['from'])
+                trader = ctx.guild.get_member(int(trader_id))
 
-            # Check if the trader's card is still available for trading
-            try:
-                receive = database[str(trader_id)][given_cardID]
-            except Exception as error:
-                print(error)
-                await ctx.send(f"Trade failed! {trader} no longer has card `{received}`.")
-                # Delete trade offer
-                del trades[user_id][trade_id]
-                with open("tradingcards/trades.json", "w") as f:
-                    json.dump(trades, f, indent=4)
-                return
+                requested_cardID = trade['want']
+                given_cardID = trade['have']
+
+                requested_card = all_cards[requested_cardID]
+                given_card = all_cards[given_cardID]
+
+                received = f"{given_card['name']}{' (HOLO)' if given_card['holo'] else ''}"
+                traded_away = f"{requested_card['name']}{' (HOLO)' if requested_card['holo'] else ''}"
+
+                # Check if the tradee's card is still available for trading
+                try:
+                    deliver = database[str(user_id)][requested_cardID]
+                except Exception as error:
+                    print(error)
+                    await ctx.send(f"Trade failed! {ctx.author.name} no longer has card `{traded_away}`.")
+                    # Delete trade offer
+                    del trades[user_id][trade_id]
+                    with open("tradingcards/trades.json", "w") as f:
+                        json.dump(trades, f, indent=4)
+                    return
+
+                # Check if the trader's card is still available for trading
+                try:
+                    receive = database[str(trader_id)][given_cardID]
+                except Exception as error:
+                    print(error)
+                    await ctx.send(f"Trade failed! {trader} no longer has card `{received}`.")
+                    # Delete trade offer
+                    del trades[user_id][trade_id]
+                    with open("tradingcards/trades.json", "w") as f:
+                        json.dump(trades, f, indent=4)
+                    return
             
             # Trade (tradee side)
-            tc_add(user_id, given_cardID)
-            tc_remove(user_id, requested_cardID)
+            await tc_add(user_id, given_cardID, ctx)
+            await tc_remove(user_id, requested_cardID, ctx)
 
             # Trade (trader side)
-            tc_add(trader_id, requested_cardID)
-            tc_remove(trader_id, given_cardID)
+            await tc_add(trader_id, requested_cardID, ctx)
+            await tc_remove(trader_id, given_cardID, ctx)
 
             # Delete the trade offer
             del trades[user_id][trade_id]
@@ -2150,7 +2810,24 @@ async def tc(ctx, *args):
             embed.set_image(url=f'attachment://{requested_cardID}.png')
 
             await ctx.send(f"<@{trader_id}> Transaction complete!", embed=embed, file=file)
-        
+
+            statistics("Trading Cards trades accepted")
+
+            for usr in [user_id, trader_id]:
+
+                await achievement(
+                    ctx=ctx,
+                    who=usr,
+                    achievement_ids=[
+                        'tc_trade_count_1',
+                        'tc_trade_count_5',
+                        'tc_trade_count_10',
+                        'tc_trade_count_25',
+                        'tc_trade_count_50',
+                        'tc_trade_count_100'
+                    ]
+                )
+
         elif args[0].lower() == 'rebuild':
 
             if len(args) < 2:
@@ -2173,7 +2850,7 @@ async def tc(ctx, *args):
             failure = []
             for card_id, is_holo, user in users:
                 await ctx.send(f"Regenerating `{card_id}{'_holo' if is_holo else ''}` user card...")
-                if card_id not in all_cards:
+                if f"{card_id}{'_holo' if is_holo else ''}" not in all_cards:
                     await ctx.send("Failed: Card does not exist in the database, possibly because it has not yet been discovered by anyone yet.")
                     failure.append(card_id)
                     continue
@@ -2260,7 +2937,7 @@ async def tc(ctx, *args):
             userID = args[1]
             cardID = args[2]
             
-            tc_add(user_ID=userID, card_ID=cardID)
+            await tc_add(user_ID=userID, card_ID=cardID, ctx=ctx)
 
             await ctx.send(f"Card `{cardID}` added to user `{userID}` collection.")
         
@@ -2276,9 +2953,26 @@ async def tc(ctx, *args):
             userID = args[1]
             cardID = args[2]
 
-            tc_remove(user_ID=userID, card_ID=cardID)
+            await tc_remove(user_ID=userID, card_ID=cardID, ctx=ctx)
 
             await ctx.send(f"Card `{cardID}` removed from user `{userID}` collection.")
+        
+        elif args[0].lower() == 'legacy_check':
+            if not any(role.id in [role_staff, role_officers, 630835784274018347] for role in ctx.author.roles):
+                await ctx.send("Command only authorized for users with staff or officer roles.")
+                return
+            
+            legacy_IDs, unlegacy_IDs = await tc_legacy_check()
+            
+            if legacy_IDs:
+                legacy_IDs_list = '\n'.join(legacy_IDs)
+                await ctx.send(f"{len(legacy_IDs)} cards have been detected to be new legacy cards:\n{legacy_IDs_list}")
+            else:
+                await ctx.send("No new legacy cards detected!")
+            
+            if unlegacy_IDs:
+                unlegacy_IDs_list = '\n'.join(legacy_IDs)
+                await ctx.send(f"{len(unlegacy_IDs)} cards have been detected to be no longer legacy cards:\n{unlegacy_IDs_list}")
 
         return
     
@@ -2322,7 +3016,9 @@ async def tc(ctx, *args):
     # Output to database #
     ######################
 
-    tc_add(ctx.author.id, card_ID)
+    await tc_add(ctx.author.id, card_ID, ctx)
+
+    statistics("Trading cards pulled")
 
     #####################
     # Discord messaging #
@@ -2363,8 +3059,8 @@ async def tcguide(ctx):
     embed.add_field(
         name="Holographic Cards",
         value=f"""
-        Holographic cards are extremely rare cards with an holographic effect applied. Every card that is claimed has a {tc_holo_rarity*100}% (or {Fraction(tc_holo_rarity).limit_denominator()}) chance of being holographic.
-        Any card can be holographic, regardless of rarity.
+Holographic cards are extremely rare cards with an holographic effect applied. Every card that is claimed has a {tc_holo_rarity*100}% (or {Fraction(tc_holo_rarity).limit_denominator()}) chance of being holographic.
+Any card can be holographic, regardless of rarity.
         """,
         inline=False
     )
@@ -2380,8 +3076,44 @@ async def tcguide(ctx):
     )
 
     embed2.add_field(
+        name="binder+ username",
+        value=f"*Displays your binder (including legacy cards). If username is provided, displays that user's binder instead.*",
+        inline=False
+    )
+
+    embed2.add_field(
+        name="legacybinder username",
+        value=f"*Displays your binder of legacy cards. If username is provided, displays that user's binder instead.*",
+        inline=False
+    )
+
+    embed2.add_field(
         name="list username",
         value=f"*Lists all owned cards with details. If username is provided, displays that user's list instead.*",
+        inline=False
+    )
+
+    embed2.add_field(
+        name="list+ username",
+        value=f"*Lists all owned cards (including legacy cards) with details. If username is provided, displays that user's list instead.*",
+        inline=False
+    )
+
+    embed2.add_field(
+        name="legacylist username",
+        value=f"*Lists all owned legacy cards with details. If username is provided, displays that user's list instead.*",
+        inline=False
+    )
+
+    embed2.add_field(
+        name="collection username",
+        value=f"*Displays a summary of cards of each rarity collected. If username is provided, displays that user's summary instead.*",
+        inline=False
+    )
+
+    embed2.add_field(
+        name="missing username",
+        value=f"*Displays a list of cards missing from the user's collection. If username is provided, displays that user's missing cards instead.*",
         inline=False
     )
 
@@ -2410,20 +3142,26 @@ async def tcguide(ctx):
     )
 
     embed2.add_field(
-        name="accept trade_id",
-        value=f"*Accept trade offer with ID trade_id (issue trades command to view trade IDs)*",
+        name="accept trade_id OR trade_index",
+        value=f"*Accept trade offer with ID trade_id or index trade_index (issue trades command to view trade IDs and index)*",
         inline=False
     )
 
     embed2.add_field(
-        name="reject trade_id",
-        value=f"*Reject trade offer with ID trade_id.*",
+        name="reject trade_id OR trade_index",
+        value=f"*Reject trade offer with ID trade_id or index trade_index (issue trades command to view trade IDs and index).*",
         inline=False
     )
 
     embed2.add_field(
         name="cancel trade_id",
         value=f"*Cancel your trade offer (with ID trade_id) to another user.*",
+        inline=False
+    )
+
+    embed2.add_field(
+        name="whohas/whohasany card_id OR \"card name\"",
+        value=f"*`whohas` checks who has a duplicate of the queried card. `whohasany` will return all user who have at least one of that card.*",
         inline=False
     )
 
@@ -2437,24 +3175,33 @@ async def tcguide(ctx):
         name="full_rebuild",
         value=f"*JBONDGUY007 ONLY - Manually regenerates ALL binders, database and cards. Very intensive command, only use as last resort!*",
         inline=False
-)
+    )
+
+    embed2.add_field(
+        name="legacy_check",
+        value=f"*STAFF/OFFICERS ONLY - Manually check and process legacy/unlegacy cards. Task automatically runs daily.*",
+        inline=False
+    )
 
     await ctx.send(embed=embed2)
 
 @bot.command()
 async def role(ctx, role_query):
 
-    allowed_roles = [role_gamenight]
     roles = await ctx.guild.fetch_roles()
 
+    tagged_id = None
     for role in roles:
-        if role.name == role_query:
+        if role.name == role_query or str(role.id) == role_query:
             tagged_id = role.id
             tagged_role = role
             break
 
+    allowed_roles_names = ', '.join(['`'+role.name+'`' for role in roles if role.id in allowed_roles])
+
     if not tagged_id:
-        await ctx.send(f"Role `{role_query}` not found.")
+        await ctx.send(f"Role `{role_query}` not found. Must be one of: {allowed_roles_names} (or associated ID)")
+        return
 
     if tagged_id in allowed_roles:
         if tagged_role not in ctx.author.roles:
@@ -2464,7 +3211,7 @@ async def role(ctx, role_query):
             await ctx.author.remove_roles(role)
             await ctx.send(f"Role `{role.name}` revoked!")
     else:
-        await ctx.send(f"Role `{role.name}` is not an authorized self-role.")
+        await ctx.send(f"Role `{role.name}` is not an authorized self-role. Must be one of: {allowed_roles_names} (or associated ID)")
 
 @bot.command()
 async def bug(ctx, *report):
@@ -2476,7 +3223,8 @@ async def bug(ctx, *report):
     file[ctx.message.id] = {
         'reporter': ctx.author.name,
         'message_link': f'https://discord.com/channels/{ctx.guild.id}/{ctx.channel.id}/{ctx.message.id}',
-        'report': report
+        'report': report,
+        'type': 'bugs'
     }
 
     with open("bug_reports.json", "w") as f:
@@ -2484,46 +3232,81 @@ async def bug(ctx, *report):
     
     await ctx.send(f"Bug report `{ctx.message.id}` logged! Thanks for your support!")
 
+    statistics("PaigeBot bugs/suggestions submitted")
+
 @bot.command()
-async def buglog(ctx, *args):
+async def suggestion(ctx, *report):
+    report = ' '.join(report)
+
+    with open('bug_reports.json') as feedsjson:
+        file = json.load(feedsjson)
+    
+    file[ctx.message.id] = {
+        'reporter': ctx.author.name,
+        'message_link': f'https://discord.com/channels/{ctx.guild.id}/{ctx.channel.id}/{ctx.message.id}',
+        'report': report,
+        'type': 'suggestions'
+    }
+
+    with open("bug_reports.json", "w") as f:
+        json.dump(file, f, indent=4)
+    
+    await ctx.send(f"Suggestion `{ctx.message.id}` logged! Thanks for your support!")
+
+    statistics("PaigeBot bugs/suggestions submitted")
+
+@bot.command(aliases=['buglog'])
+async def reports(ctx, *args):
 
     with open('bug_reports.json') as feedsjson:
         file = json.load(feedsjson)
 
+    report_types = ['bugs', 'suggestions']
+
     if args:
         if args[0].lower() == 'clear':
             if not ctx.author.id == jbondguy007_userID:
-                await ctx.send("Clearing bug reports is only authorized for jbondguy007.")
+                await ctx.send("Clearing reports is only authorized for jbondguy007.")
                 return
             if len(args) < 2:
                 await ctx.send("Clear command requires `reportID` argument.")
                 return
-            try:
-                bug = file[args[1]]
-                del file[args[1]]
-                with open("bug_reports.json", "w") as f:
-                    json.dump(file, f, indent=4)
-                await ctx.send(f"Cleared bug report:\nReport ID: `{args[1]}`\nDescription: `{bug['report']}`")
-                return
-            except:
-                await ctx.send(f"Error attempting to clear bug report `{args[1]}`.")
-                return
+            
+            for arg in args[1:]:
+                try:
+                    bug = file[arg]
+                    del file[arg]
+                    with open("bug_reports.json", "w") as f:
+                        json.dump(file, f, indent=4)
+                    await ctx.send(f"Cleared report:\nReport ID: `{arg}`\nDescription: `{bug['report']}`")
+                    continue
+                except:
+                    await ctx.send(f"Error attempting to clear report `{arg}`.")
+                    continue
+            return
+        
+        elif args[0].lower() == 'bugs' or args[0].lower() == 'suggestions':
+            report_types = [args[0].lower()]
+        
         else:
             await ctx.send(f"Unrecognized command argument `{args[0]}`.")
             return
     
-    embed = discord.Embed(title="Bug Reports Log")
+    embed = discord.Embed(title=f"{' and '.join([report_type.capitalize() for report_type in report_types])} Reports Log", color=bot_color)
 
-    for report_ID, report in file.items():
+    for report_ID, report in [(id, rep) for id, rep in file.items() if rep['type'] in report_types]:
+        
+        report_type = f"{report['type'][:-1].capitalize()}: "
+
         embed.add_field(
             name=f"Report ID: {report_ID}\nReporter: {report['reporter']}\nReport Link: {report['message_link']}",
-            value=report['report'],
+            value=f"{report_type}{report['report']}",
             inline=False
         )
     
     if len(file) == 0:
         embed.add_field(
-            name="No bug reports pending!",
+            name="No reports pending!",
             value="",
             inline=False
         )
@@ -2538,7 +3321,7 @@ async def reviewed(ctx, *query):
         await ctx.send(f"`{query}` not found in the magazine index.")
         return
 
-    embed = discord.Embed(title=f"\"{game['title']}\" Review", url=game['issue_link'])
+    embed = discord.Embed(title=f"\"{game['title']}\" Review", url=game['issue_link'], color=bot_color)
     embed.set_image(url=f"https://cdn.akamai.steamstatic.com/steam/apps/{game['AppID']}/header.jpg")
     embed.add_field(
         name=f"{game['title']} was reviewed as part of {game['issue']}.",
@@ -2546,74 +3329,349 @@ async def reviewed(ctx, *query):
     )
     await ctx.send(embed=embed)
 
-# class Achievement():
-#     def __init__(self, name, description, counter_goal=None):
-#         self.name = name
-#         self.description = description
-#         if counter_goal:
-#             self.counter = 0
-#             self.counter_goal = counter_goal
+@bot.command(aliases=['flipcoin'])
+async def coinflip(ctx):
+    result = random.choice(["heads! :bust_in_silhouette:", "tails! :coin:"])
+    await ctx.send(f"Paige flips a virtual coin and it lands on... {result}")
 
-# Achievements
+@bot.command(aliases=['pta'])
+async def process_tc_achievements(ctx):
+    if not ctx.author.id == jbondguy007_userID:
+        await ctx.send("Command only authorized to botmaster (jbondguy007).")
+        return
 
-# ach_my_first_card = {
-#     'id': 'ach_my_first_card',
-#     'name': "My First Card",
-#     'description': "Claim your first Trading Card."
-# }
-
-# ach_poker_first_play = {
-#     'name': "Poker? I Hardly Know Her!",
-#     'description': "Play Dice Poker for the first time."
-# }
-
-# ach_poker_first_win = {
-#     'name': "Gambler",
-#     'description': "Win at Dice Poker."
-# }
-
-# ach_ai_first_chat = {
-#     'name': "I, For One, Welcome Our AI Overlord",
-#     'description': "Have a chat with PaigeBot's AI integration."
-# }
-
-# ach_test_command = {
-#     'name': "Is This Thing On?",
-#     'description': "Issue the `test` PaigeBot command."
-# }
-
-# async def achievement(ctx, achievement_id):
-#     user = ctx.author.id
-
-#     with open("achievements_usersdata.json") as feedsjson:
-#         achievements_log = json.load(feedsjson)
-#     with open("achievements.json") as feedsjson:
-#         achievements = json.load(feedsjson)
+    with open('tradingcards/database.json') as feedsjson:
+        tc_database = json.load(feedsjson)
     
-#     achievement = achievements[achievement_id]
+    size = len(tc_database)
+    msg = await ctx.send(f"Processing... 0/{size} user binders...")
     
-#     if user not in achievements_log:
-#         achievements_log[user] = {}
-    
-#     # Initiate achievement
-#     if achievement_id not in achievements_log[user]:
-#         achievements_log[user][achievement_id] = achievement
-#         achievements_log[user][achievement_id]['count'] = 1
+    for e, (user, cards) in enumerate(tc_database.items()):
+        normal_count = 0
+        holo_count = 0
+        for card, details in cards.items():
+            if card.endswith('_holo'):
+                holo_count += details['count']
+            else:
+                normal_count += details['count']
 
-#     if achievement['goal']:
-#         if achievements_log[user][achievement_id]['counter']
-#         achievements_log[user][achievement_id]['counter'] = 1
-#         achievements_log[user][achievement_id]['counter'] += 1
+            # tc_misc_getself
+            if user == re.search("\d+", card)[0]:
+                await achievement(ctx=ctx, who=user, achievement_ids=['tc_misc_getself'])
 
-#     if not achievements_log[user][achievement_id]['counter'] == achievement['goal']:
-#         return
-    
-#     achievements_log[user][achievement_id]['unlocked_date'] = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+            # tc_misc_getdup
+            if details['count'] > 1:
+                await achievement(ctx=ctx, achievement_ids=['tc_misc_getdup'])
+            
+            # tc_misc_same_normalholo
+            if (
+                '_holo' in card and tc_database[user].get(card.replace('_holo', '')) or
+                tc_database[user].get(card+'_holo')
+                ):
+                    await achievement(ctx=ctx, achievement_ids=['tc_misc_same_normalholo'])
+        
+        for i in range(holo_count):
+            await achievement(
+                ctx=ctx,
+                achievement_ids=[
+                    'tc_holo_count_1',
+                    'tc_holo_count_5',
+                    'tc_holo_count_10',
+                    'tc_holo_count_25',
+                    'tc_holo_count_50'
+                ],
+                who=user,
+                dontgrant=False
+            )
+        
+        for i in range(normal_count):
+            await achievement(
+                ctx=ctx,
+                achievement_ids=[
+                    'tc_normal_count_1',
+                    'tc_normal_count_5',
+                    'tc_normal_count_10',
+                    'tc_normal_count_25',
+                    'tc_normal_count_50',
+                    'tc_normal_count_100'
+                ],
+                who=user,
+                dontgrant=True
+            )
 
-#     with open("achievements_usersdata.json", "w") as f:
-#         json.dump(achievements_log, f)
+        await msg.edit(content=f"Processing... {e+1}/{size} user binders...")
     
-#     await ctx.send(f"Achievement unlocked: {achievement.name}")
+    await msg.edit(content=f"Done! {e+1}/{size}")
+    await ctx.send(f"Done! {e+1}/{size} user binders processed.")
+
+@bot.command()
+async def grant_achievement(ctx, *args):
+    if not ctx.author.id == jbondguy007_userID:
+        await ctx.send("Command only authorized to botmaster (jbondguy007).")
+        return
+    
+    try:
+        granted_user = get_user_from_username(args[0]).id
+    except:
+        granted_user = args[0]
+
+    try:
+        granted_achievement_id = args[1]
+    except:
+        await ctx.send("One or more arguments are missing!")
+        return
+
+    try:
+        await achievement(ctx=ctx, who=granted_user, achievement_ids=[granted_achievement_id])
+    except:
+        await ctx.send(f"Error granting achievement! Make sure user ID {granted_user} and achievement ID {granted_achievement_id} are correct.")
+
+@bot.command(aliases=['cheevos', 'ach'])
+async def achievements(ctx, *args):
+
+    user = ctx.author
+    first_time_viewing_achievements = False
+
+    with open("achievements_usersdata.json") as feedsjson:
+        achievements_usersdata = json.load(feedsjson)
+    
+    with open("achievements.json") as feedsjson:
+        achievements_list = json.load(feedsjson)
+    
+    if not achievements_usersdata.get(str(user.id)):
+        first_time_viewing_achievements = True
+        await achievement(ctx=ctx, achievement_ids=['misc_first_interact', 'misc_achievement_command'])
+        achievements_usersdata[str(user.id)] = {}
+
+    user_achievements = achievements_usersdata[str(user.id)]
+
+    try:
+        arg = args[0]
+    except:
+        arg = False
+    
+    achievements_categories = {re.search('^[^_]+(?=_)', key)[0] for key in achievements_list.keys()}
+
+    if arg in achievements_categories:
+        achievements_list = {id: ach for id, ach in achievements_list.items() if id.startswith(arg.lower())}
+        user_achievements = {id: ach for id, ach in user_achievements.items() if id.startswith(arg.lower())}
+    elif not arg:
+        pass
+    else:
+        await ctx.send(f"Category `{arg}` is not recognized. Must be one of {', '.join(['`'+x+'`' for x in achievements_categories])}.")
+        return
+    
+    achievements_unlocked = {id: ach for id, ach in user_achievements.items() if ach.get('unlocked_date')}
+
+    keys = list(achievements_list.keys())
+    achievements_count = len(achievements_list)
+    batch_size = 25
+
+    for i in range(0, achievements_count, batch_size):
+        embed = discord.Embed(title=f"{user.name}'s {arg if arg else 'Full List of'} Achievements", description=f"Unlocked {len(achievements_unlocked.keys())}/{achievements_count}" if i == 0 else "", color=bot_color)
+
+        batch_keys = keys[i:i + batch_size]
+        batch_dict = {key: achievements_list[key] for key in batch_keys}
+
+        for ach, details in batch_dict.items():
+            try:
+                unlocked = user_achievements[ach]['unlocked_date']
+            except:
+                unlocked = False
+            
+            progress = ''
+            if details['goal'] > 1:
+                if user_achievements.get(ach):
+                    progress = f"({user_achievements[ach]['counter']}/{details['goal']})"
+                else:
+                    progress = f"(0/{details['goal']})"
+            
+            if details['secret'] and not unlocked:
+                embed.add_field(
+                    name=f"🔒 {details['name']}",
+                    value=f"SECRET ACHIEVEMENT - Unlock to reveal description\nUnlocked: {unlocked}",
+                    inline=False
+                )
+            else:
+                embed.add_field(
+                    name=f"{':white_check_mark:' if unlocked else '🔒'} {details['name']}",
+                    value=f"{details['description']} {progress}\nUnlocked: {unlocked}",
+                    inline=False
+                )
+    
+        await ctx.send(embed=embed)
+    if first_time_viewing_achievements:
+        await ctx.send(
+f"""### DISCLAIMER
+<@{ctx.author.id}> I see this is your first time viewing achievements. Welcome to PaigeBot Achievements!
+
+In an effort to ensure everyone has a good time, please abide to some general guidelines:
+- Please do not intentionally spam the exact same command/message in an attempt to speedrun achievements! Your enthusiasm is appreciated, but try not to spam.
+- Similarly, while you can ask another user to play chat games with you to unlock achievements, avoid bruteforcing or assisting each other in artificially unlocking achievements.
+- In general, just enjoy the achievements responsibly! This is a fun feature, but we don't want it to cause issues due to heavy spam and whatnot. Paige will be watching! <:paigewink:1135346141676978266>
+"""
+    )
+
+@bot.command()
+async def stats(ctx):
+    embed = discord.Embed(title="PaigeBot and Misc Statistics", description="A collection of PaigeBot and miscellaneous server-wide statistics.", color=bot_color)
+
+    with open("statistics.json") as feedsjson:
+        statistics = json.load(feedsjson)
+
+    for stat, count in statistics.items():
+        embed.add_field(
+            name=stat,
+            value=f"{count:,}",
+            inline=False
+        )
+    
+    await ctx.send(embed=embed)
+
+@bot.command(aliases=['tpir'])
+async def gtp(ctx):
+    if isinstance(ctx.channel, discord.DMChannel):
+        await ctx.send("Guess The Price rounds may not be started in DMs!")
+        return
+    
+    global prevent_gtp_command
+    if prevent_gtp_command:
+        await ctx.send(f"<@{ctx.author.id}> a Guess The Price round is already ongoing!")
+        return
+    prevent_gtp_command = True
+
+    await achievement(ctx=ctx, achievement_ids=['gtp_misc_start_round'])
+
+    gtp_start_timer = 20
+
+    url = 'http://www.watchcount.com/completed.php'
+    r = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64"})
+    soup = bs(r.content, "html.parser")
+    categories_raw = [(re.search('^(.+?) \[', option.text[2:]).group(1), int(option['value'])) for option in soup.find(id="select_bcat").find_all('option')][1:]
+    categories = [cat for cat in categories_raw if not cat[0].startswith("Motors:")]
+    motors_cat = [cat for cat in categories_raw if cat[0].startswith("Motors:")]
+    random_motor = random.choice(motors_cat)
+    categories.append(random_motor)
+    category = random.choice(categories)
+    cat_id = category[1]
+
+    await ctx.send(f"Your category is... `{category[0]}`! Let's see what we have...")
+
+    listings_category_url = f'http://www.watchcount.com/completed.php?bcat={cat_id}&bfw=1&csbin=auc'
+
+    r = requests.get(listings_category_url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64"})
+    soup = bs(r.content, "html.parser")
+    table = soup.find('table', class_='dt bg0')
+    random_listing = random.choice(table.find_all('tr', {'itemscope': True, 'itemtype': 'http://schema.org/Product'}))
+
+    title = random_listing.find('span', {'itemprop': 'name'}).text
+    price_text = random_listing.find('span', {'itemprop': 'price'}).text
+    price = float(Decimal(sub(r'[^\d.]', '', price_text)))
+    image = random_listing.find('img', {'class': 'gallery2'})['src']
+
+    embed = discord.Embed(title=title, description="It's time to Guess The Price!")
+    embed.set_image(url=image)
+
+    await ctx.send(embed=embed)
+
+    responses = {}
+
+    def check(m):
+        return m.author != bot.user and m.channel == ctx.channel and re.match('^(?:\d+|\d+\.\d{2})$', m.content) and m.author.id not in responses.keys()
+    
+    await ctx.send(f"Guessing ends in `{gtp_start_timer}` seconds. Only your first guess counts!")
+
+    time_started = datetime.now()
+    gtp_timer = gtp_start_timer
+
+    while True:
+        try:
+            message = await bot.wait_for('message', check=check, timeout=gtp_timer)
+            responses[message.author.id] = float(Decimal(sub(r'[^\d.]', '', message.content)))
+
+            now = datetime.now()
+
+            time_elapsed = now-time_started
+            time_elapsed = timedelta(seconds=time_elapsed.seconds)
+
+            timer_deltatime = timedelta(seconds=gtp_start_timer) # 20
+
+            gtp_timer = timer_deltatime-time_elapsed
+            gtp_timer = gtp_timer.seconds
+
+        except asyncio.TimeoutError:
+            break
+        continue
+
+    if not responses:
+        await ctx.send(f"No guesses? Too bad!\nThis item sold for... **${price:.2f}**\nThanks for playing!")
+        prevent_gtp_command = False
+        return
+    
+    statistics("Guess The Price rounds played")
+    
+    guesses = '\n'.join(f"{bot.get_user(int(user)).name}: ${response:.2f}" for user, response in responses.items())
+
+    await ctx.send(f"Guesses: \n{guesses}")
+
+    def closest_value(dictionary, target):
+        closest_key = min(dictionary, key=lambda key: abs(dictionary[key] - target))
+        closest_value = dictionary[closest_key]
+        return closest_key, closest_value
+    
+    closest_user, closest_guess = closest_value(responses, price)
+
+    difference = abs(price - closest_guess)
+
+    if len(responses) == 1:
+        await ctx.send(f"Unfortunately, there are no winners as <@{closest_user}> was the only participant this round. \nYou guessed `${closest_guess:,.2f}`, only `${difference:,.2f}` from the correct answer:\n# `${price:,.2f}`!")
+    else:
+        await ctx.send(f"And the winner is...\n<@{closest_user}> who guessed `${closest_guess:,.2f}`, only `${difference:,.2f}` from the correct answer:\n# `${price:,.2f}`!")
+    
+        await achievement(
+            ctx=ctx,
+            who=closest_user,
+            achievement_ids=[
+                'gtp_win_count_1',
+                'gtp_win_count_5',
+                'gtp_win_count_10',
+                'gtp_win_count_25',
+                'gtp_win_count_50'
+            ]
+        )
+
+        if len(responses) >= 5:
+            await achievement(ctx=ctx, who=closest_user, achievement_ids=['gtp_misc_win_against_5'])
+        
+        if difference <= 1.00:
+            await achievement(ctx=ctx, who=closest_user, achievement_ids=['gtp_win_guess_closeness_1'])
+        if difference <= 5.00:
+            await achievement(ctx=ctx, who=closest_user, achievement_ids=['gtp_win_guess_closeness_5'])
+        if difference >= 1000.00:
+            await achievement(ctx=ctx, who=closest_user, achievement_ids=['gtp_misc_win_1k_away'])
+        if difference >= 10000.00:
+            await achievement(ctx=ctx, who=closest_user, achievement_ids=['gtp_misc_win_10k_away'])
+        if difference >= 25000.00:
+            await achievement(ctx=ctx, who=closest_user, achievement_ids=['gtp_misc_win_25k_away'])
+    
+    prevent_gtp_command = False
+    
+    for user, guess in responses.items():
+
+        difference = abs(price - guess)
+        if difference == 0.00:
+            await achievement(ctx=ctx, who=user, achievement_ids=['gtp_guess_closeness_perfect'])
+            statistics("Guess The Price perfect guesses")
+        if guess == 3.50:
+            await achievement(ctx=ctx, who=user, achievement_ids=['gtp_misc_guess_3_50'])
+        elif guess == 42.0:
+            await achievement(ctx=ctx, who=user, achievement_ids=['gtp_misc_guess_42'])
+        elif guess == 69.0:
+            await achievement(ctx=ctx, who=user, achievement_ids=['gtp_misc_guess_69'])
+        elif guess in [420.0, 4.20]:
+            await achievement(ctx=ctx, who=user, achievement_ids=['gtp_misc_guess_420'])
+        
+        statistics("Guess The Price guesses")
 
 # HELP COMMANDS
 
@@ -2622,6 +3680,12 @@ async def help(ctx, query=None):
 
     threads_list = list(steamgifts_threads)
     threads_list = ", ".join(threads_list)
+
+    with open("achievements.json") as feedsjson:
+        achievements_list = json.load(feedsjson)
+
+    achievements_categories = {re.search('^[^_]+(?=_)', key)[0] for key in achievements_list.keys()}
+
     commands_list = [
         ("test",
          "Simple test command. Check if the bot is alive!"),
@@ -2629,7 +3693,7 @@ async def help(ctx, query=None):
         ("help `query`",
          "Displays the help message. If `query` is provided, displays help for the relevant command, if any."),
 
-        ("info",
+        ("info (aliases: `about`, `status`)",
          f"Information about me, {botname}!"),
 
         ("threads",
@@ -2683,7 +3747,7 @@ async def help(ctx, query=None):
         ("slotskey `activation-key-here, platform, Title Here`",
          f"Contribute a game key to the slots command prize pool. Must be issued privately via DM to {botname}."),
 
-        ("slotsprizes",
+        ("slotsprizes (aliases: `slotprize`, `slotsprize`, `slotprizes`)",
          "Lists the titles of available prizes in the slots command prize pool."),
 
         ("poker `@user`",
@@ -2697,12 +3761,27 @@ async def help(ctx, query=None):
 
         ("bug `message`",
          f"Logs a bug report. Please include details as `message` - example: `{prefixes[0]}bug The trading card guide has a typo in the rarity sections.`"),
+        
+        ("suggestion `message`",
+         f"Logs a suggestion. Please include details as `message` - example: `{prefixes[0]}suggestion Make the help menu less chaotic.`"),
 
-        ("buglog `clear reportID`",
-         "Displays all pending bug reports. JBONDGUY007 ONLY: If `clear reportID` arguments are provided, clears report with id `reportID` from the bug log."),
+        ("reports (aliases: `buglog`) `clear` `bugs` `suggestions`",
+         "Takes one or no arguments, and displays all relevant pending reports. JBONDGUY007 ONLY: If `clear` argument followed by `list-of-report-IDs` is provided, clears report(s) with list of IDs `list-of-report-IDs` from the bug log."),
         
         ("reviewed `game`",
-         "Searches for `game` in the magazine index, and returns the link to the magazine in which this game was reviewed, if any. `game` may be a full game title (not case-sensitive) or AppID.")
+         "Searches for `game` in the magazine index, and returns the link to the magazine in which this game was reviewed, if any. `game` may be a full game title (not case-sensitive) or AppID."),
+        
+        ("coinflip (aliases: `flipcoin`)",
+         "Flips a coin."),
+        
+        ("achievements (aliases: `cheevos`, `ach`) `category`",
+         f"View all achievements including which ones you've unlocked. Takes an optional argument `category` which is one of {', '.join(['`'+x+'`' for x in achievements_categories])}."),
+        
+        ("stats",
+         "View PaigeBot and other fun server-wide statistics."),
+        
+        ("gtp (aliases: `tpir`)",
+         "Begin a \"The Price Is Right\" inspired minigame, \"Guess the Price\"! Complete to guess as closely to the winning bid price (USD) of a random Ebay auction.")
     ]
 
     mod_commands_list = [
@@ -2733,7 +3812,7 @@ async def help(ctx, query=None):
         returned = False
 
         # Public commands:
-        for com in [x for x in commands_list if x[0].split()[0] == query.lower()]:
+        for com in [x for x in commands_list if query.lower() in x[0].split() or query.lower() in x[0].split('`')]:
             command = discord.Embed(title=f'Help: {com[0].split()[0]}', color=bot_color)
             command.add_field(
                 name=f"{prefixes[0]}{com[0]}",
@@ -2744,7 +3823,7 @@ async def help(ctx, query=None):
             returned = True
 
         # Moderator commands:
-        for com in [x for x in mod_commands_list if x[0].split()[0] == query.lower()]:
+        for com in [x for x in mod_commands_list if query.lower() in x[0].split() or query.lower() in x[0].split('`')]:
             command = discord.Embed(title=f'Help: {com[0].split()[0]}', color=bot_color)
             command.add_field(
                 name=f"{prefixes[0]}{com[0]}",
@@ -2799,7 +3878,7 @@ async def updatethread(ctx, thread, link):
 
     if thread in steamgifts_threads:
         permanent_variables['thread_links'][thread] = link
-        with open("permanent_variables.json", "w") as f:      # write back to the json file
+        with open("permanent_variables.json", "w") as f:
             json.dump(permanent_variables, f)
 
         await ctx.send(f"Thread `{thread}` set to `{link}`.")
@@ -2880,6 +3959,13 @@ async def aipurge(ctx):
 
 # CONTRIBUTOR COMMANDS
 
+@bot.command()
+@commands.has_any_role(role_staff)
+async def backup(ctx):
+    await ctx.send("Backing up data to AWS S3 bucket...")
+    upload_backups()
+    await ctx.send(f"Backup successful! - Backup time: `{datetime.now().strftime('%d/%m/%Y %H:%M:%S')} GMT-3`")
+
 def fetch_giveaway_info(url):
     r = requests.get(url)
     page = bs(r.content, "html.parser")
@@ -2893,14 +3979,6 @@ def fetch_giveaway_info(url):
         "steam_link": steam_link,
         "image": image
     })
-
-@bot.command()
-@commands.has_any_role(role_staff)
-async def backup(ctx):
-    await ctx.send("Backing up data to AWS S3 bucket...")
-    upload_backups()
-    await ctx.send(f"Backup successful! - Backup time: `{datetime.now().strftime('%d/%m/%Y %H:%M:%S')} GMT-3`")
-
 
 @bot.command()
 @commands.has_any_role(role_fullmember, role_contributors, role_staff)
@@ -2939,7 +4017,7 @@ async def dailynotif(ctx, *reminder):
         persistent_data['24h_reminder'] = reminder
         await ctx.send(f"Set daily reminder:\n`{reminder}`")
     
-    with open('persistent_data.json', 'w') as f:
+    with open('permanent_variables.json', 'w') as f:
         json.dump(persistent_data, f)
 
 # TASKS
@@ -3027,6 +4105,18 @@ async def daily_tasks():
         await cha.send("Backing up data to AWS S3 bucket `upload_backups()`...")
         upload_backups()
         await cha.send(f"Backup successful! - Backup time: `{datetime.now().strftime('%d/%m/%Y %H:%M:%S')} GMT-3`")
+
+        await cha.send("Checking for legacy trading cards `tc_legacy_check()`...")
+        legacy_IDs, unlegacy_IDs = await tc_legacy_check()
+        if legacy_IDs:
+            legacy_IDs_list = '\n'.join(legacy_IDs)
+            await cha.send(f"{len(legacy_IDs)} cards have been detected to be new legacy cards:\n{legacy_IDs_list}")
+        else:
+            await cha.send("Done! No new legacy cards detected!")
+        
+        if unlegacy_IDs:
+            legacy_IDs_list = '\n'.join(legacy_IDs)
+            await cha.send(f"{len(legacy_IDs)} cards have been detected to no longer be legacy cards:\n{legacy_IDs_list}")
 
 # Daily Notifications
 
