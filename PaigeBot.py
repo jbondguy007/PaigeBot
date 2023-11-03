@@ -3440,8 +3440,12 @@ async def achievements(ctx, *args):
     
     if not achievements_usersdata.get(str(user.id)):
         first_time_viewing_achievements = True
-        await achievement(ctx=ctx, achievement_ids=['misc_first_interact', 'misc_achievement_command'])
         achievements_usersdata[str(user.id)] = {}
+    
+    if not achievements_usersdata[str(user.id)].get('misc_achievement_command'):
+        first_time_viewing_achievements = True
+    
+    await achievement(ctx=ctx, achievement_ids=['misc_first_interact', 'misc_achievement_command'])
 
     user_achievements = achievements_usersdata[str(user.id)]
 
