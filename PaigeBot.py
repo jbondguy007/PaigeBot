@@ -1453,14 +1453,14 @@ async def slotsprizes(ctx):
 
 def roll_dice(hand, r=None, k=None):
     if not r and not k:
-        hand = [random.randrange(1, 5) for _ in range(5)]
+        hand = [random.randrange(1, 7) for _ in range(5)]
         return hand
     elif r:
         for d in r:
-            hand[int(d)-1] = random.randrange(1, 5)
+            hand[int(d)-1] = random.randrange(1, 7)
         return hand
     elif k:
-        new_hand = [random.randrange(1, 5) for _ in range(5)]
+        new_hand = [random.randrange(1, 7) for _ in range(5)]
         for d in k:
             new_hand[int(d)-1] = hand[int(d)-1]
         return new_hand
