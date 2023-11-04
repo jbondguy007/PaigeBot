@@ -1439,7 +1439,7 @@ async def slotsprizes(ctx):
             username = ctx.guild.get_member(game['user'])
             embed.add_field(
                 name=game['title'],
-                value=f"Contributor: {username.display_name}\nPlatform: {game['platform']}",
+                value=f"Contributor: {username.display_name if username else game['user']}\nPlatform: {game['platform']}",
                 inline=False
             )
     else:
@@ -2500,6 +2500,8 @@ async def tc(ctx, *args):
             embed = discord.Embed(title=f"Owners of{' Any' if whohasany else ' Duplicate'} `{card['name']}{' (HOLO)' if is_holo else''}` Cards", color=bot_color)
             
             for u in whohas_users:
+                if not bot.get_user(int(u)):
+                    continue
                 embed.add_field(
                     name=bot.get_user(int(u)).name,
                     value=f"Count: {database[u][cardID]['count']}\n<@{bot.get_user(int(u)).id}>"
@@ -2911,7 +2913,8 @@ async def tc(ctx, *args):
                         is_holo = True
                     all_cards.add( (card, is_holo, ctx.guild.get_member(int(card))) )
                 
-                await ctx.send(f"Binder for {ctx.guild.get_member(int(user_id)).name} rebuilt!")
+                userobject = ctx.guild.get_member(int(user_id))
+                await ctx.send(f"Binder for {userobject.name if userobject else user_id} rebuilt!")
 
             count = 0
             count_msg = await ctx.send(f"Rebuilding all cards...\n{count}/{len(all_cards)}")
