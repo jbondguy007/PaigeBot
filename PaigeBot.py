@@ -13,6 +13,7 @@ import openai
 import random
 import boto3
 import traceback
+import validators
 # import country_converter as coco
 
 from datetime import date, datetime, timedelta
@@ -69,6 +70,7 @@ role_interviewers = 1132003617046528050
 role_bots = 1067986921021788261
 role_gamenight = 1142304222176608340
 role_paigebotchangelog = 1166421373447573595
+role_secretsanta = 1172277564597878854
 
 jbondguy007_userID = 172522306147581952
 
@@ -76,8 +78,8 @@ allowed_roles = [role_gamenight, role_paigebotchangelog]
 
 # TODO IF TESTING: Set to arial.ttf
 
-chosen_font = "DejaVuSans.ttf"
-# chosen_font = "arial.ttf"
+# chosen_font = "DejaVuSans.ttf"
+chosen_font = "arial.ttf"
 
 with open("permanent_variables.json", "r") as f:
     permanent_variables = json.load(f)
@@ -2833,6 +2835,37 @@ async def tc(ctx, *args):
                         'tc_trade_count_100'
                     ]
                 )
+        
+        # elif args[0].lower() == 'prestige':
+        #     undiscovered_cards = {user.id: {'name': user.name, 'holo': False, 'rarity': '(Undiscovered)'} for user in ctx.guild.members if str(user.id) not in [user for user in all_cards.keys()]}
+        #     player_missing_cards = {k: v for k, v in all_cards.items() if k not in player_collection.keys() and not v['holo'] and not v.get('legacy')}
+        #     player_missing_cards.update(undiscovered_cards)
+
+        #     if player_collection:
+        #         await ctx.send(f"User is not eligible for prestige! Please complete your collection first.\nYou are still missing {len(player_collection.keys())}/{len(server_members)} cards.")
+        #         return
+            
+        #     await ctx.send(f"User is eligible for prestige!\nPrestige will **delete** all your cards (except legacy and holo) **including duplicates** and increase your prestige level by 1.\n**This should only be done if you want to reset your trading card collection! Prestige level will not give you anything more than bragging rights.**")
+        #     await ctx.send(f"<@{ctx.author.id}> **THIS WILL RESET YOUR TRADING CARDS PROGRESSION.**\n**DO YOU WISH TO PROCEED WITH PRESTIGE?**\n```css\nY\n```")
+
+        #     def check(m):
+        #         return m.author == ctx.author and m.content.lower() == "y"
+
+        #     try:
+        #         await bot.wait_for("message", check=check, timeout=5.0)
+        #     except asyncio.TimeoutError:
+        #         await ctx.send("Command timed out. Operation cancelled.")
+        #         return
+            
+        #     await ctx.send("Action confirmed! Processing prestige...")
+        #     for id, info in database[str(ctx.author.id)].items():
+        #         if info.get('holo') or info.get('legacy'):
+        #             pass
+        #         else:
+        #             del database[str(ctx.author.id)][id]
+            
+
+        # Admin/botmaster commands
 
         elif args[0].lower() == 'rebuild':
 
@@ -3684,6 +3717,84 @@ async def gtp(ctx):
         
         statistics("Guess The Price guesses")
 
+# class SecretSantaButtons(discord.ui.View):
+#     def __init__(self, ctx, wishlist, role):
+#         super().__init__()
+#         self.ctx = ctx
+#         self.author = ctx.author
+#         self.wishlist = wishlist
+
+#     async def interaction_check(self, interaction: discord.Interaction):
+#         return interaction.user.id == self.author.id
+
+#     @discord.ui.button(label='Agree', style=discord.ButtonStyle.success)
+#     async def agree(self, interaction: discord.Interaction, button: discord.ui.Button):
+#         button.disabled = True
+#         for child in self.children:
+#             child.disabled = True
+#         await interaction.response.edit_message(view=self)
+
+#         with open('secret_santa_registration.json', 'r') as feedsjson:
+#             file = json.load(feedsjson)
+
+#         file[self.author.id] = {
+#             'info': {
+#                 'name': self.author.name,
+#                 'id': self.author.id,
+#                 'wishlist': self.wishlist
+#             },
+#             'assigned': {}
+#         }
+
+#         with open("secret_santa_registration.json", "w") as f:
+#             json.dump(file, f, indent=4)
+        
+#         role = self.ctx.guild.get_role(role_secretsanta)
+#         await self.author.add_roles(role)
+        
+#         await interaction.followup.send(f'<@{self.author.id}> you have registered for SGM Secret Santa!', ephemeral=False)
+    
+#     @discord.ui.button(label='Cancel', style=discord.ButtonStyle.danger)
+#     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+#         button.disabled = True
+#         for child in self.children:
+#             child.disabled = True
+#         await interaction.response.edit_message(view=self)
+#         await interaction.followup.send(f'{self.author.name}\'s registration was cancelled.', ephemeral=False)
+
+# @bot.command()
+# async def secretsanta(ctx, wishlist_link=None):
+
+#     if not wishlist_link:
+#         await ctx.send(f'Argument missing - please include your wishlist link (`{prefixes[0]}secretsanta wishlist_link`)')
+#         return
+#     if not validators.url(wishlist_link):
+#         await ctx.send(f'Argument `wishlist_link` (`{wishlist_link}`) is not a valid URL.')
+#         return
+
+#     with open('secret_santa_registration.json', 'r+') as feedsjson:
+#         file = json.load(feedsjson)
+    
+#     if file.get(str(ctx.author.id)):
+#         await ctx.send(f'<@{ctx.author.id}> you are already registered for SGM Secret Santa!')
+#         return
+
+#     view = SecretSantaButtons(ctx, wishlist=wishlist_link, role=ctx.guild.get_role(role_secretsanta))
+
+#     await ctx.send(f"""
+# By signing up for SGM Secret Santa, you commit to the following if your application is accepted:
+# - Spending a minimum of $10.00 USD (sales/discounts allowed) on Steam gift(s) and/or key(s) from your randomly assigned participant's wishlist as their gift.
+# - Promise to put genuine effort in purchasing what you truly believe will make your assigned participant happier.
+# - Understand that the same is expected by another random participant who will be your secret Santa.
+# - Make sure your wishlist has a variety of games at different price points. (No picking the most popular or expensive ones!) You will not commit any major changes to your wishlist which would greatly limit your secret Santa's options.
+# - While not enforced, we encourage playing the game or games gifted to you by your secret Santa.
+                   
+# <@{ctx.author.id}> Do you agree to these terms and would like to complete your application/registration?
+# """,
+#     view=view)
+    
+#     await view.wait()
+
 # HELP COMMANDS
 
 @bot.command()
@@ -4139,7 +4250,7 @@ async def daily_notifier():
 
     time = datetime.now().hour
     if time == 14 and reminder:
-        cha = bot.get_channel(bot_channel)
+        cha = bot.get_channel(general_channel)
         await cha.send(content=reminder)
 
 bot.run(TOKEN)
