@@ -4268,7 +4268,7 @@ async def check_for_new_giveaways():
             await channel.send(embed=embed)
 
         # Update last_checked_active_ga_ids
-        last_checked_active_ga_ids = last_checked_active_ga_ids[-50:]
+        last_checked_active_ga_ids = last_checked_active_ga_ids[-100:]
         permanent_variables['last_checked_active_ga_ids'] = last_checked_active_ga_ids
         with open("permanent_variables.json", "w") as f:
             json.dump(permanent_variables, f)
