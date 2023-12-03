@@ -4222,7 +4222,9 @@ async def check_for_new_giveaways():
 
     print(f"CHECK: check_for_new_giveaways() triggered...")
 
-    global last_checked_active_ga_ids
+    with open("permanent_variables.json", "r") as f:
+        permanent_variables = json.load(f)
+    last_checked_active_ga_ids = permanent_variables['last_checked_active_ga_ids']
     giveaways = fetch_active_giveaways()['ongoing']
     new_giveaways_list = []
     # channel = bot.get_channel(630835643953709066)
