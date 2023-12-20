@@ -28,6 +28,7 @@ from fractions import Fraction
 from botocore.exceptions import ClientError, NoCredentialsError
 from re import sub
 from decimal import Decimal
+from howlongtobeatpy import HowLongToBeat
 
 # BOT INFO
 
@@ -3717,153 +3718,185 @@ async def gtp(ctx):
         
         statistics("Guess The Price guesses")
 
-class SecretSantaButtons(discord.ui.View):
-    def __init__(self, ctx, wishlist, role):
-        super().__init__()
-        self.ctx = ctx
-        self.author = ctx.author
-        self.wishlist = wishlist
+# class SecretSantaButtons(discord.ui.View):
+#     def __init__(self, ctx, wishlist, role):
+#         super().__init__()
+#         self.ctx = ctx
+#         self.author = ctx.author
+#         self.wishlist = wishlist
 
-    async def interaction_check(self, interaction: discord.Interaction):
-        return interaction.user.id == self.author.id
+#     async def interaction_check(self, interaction: discord.Interaction):
+#         return interaction.user.id == self.author.id
 
-    @discord.ui.button(label='Agree', style=discord.ButtonStyle.success)
-    async def agree(self, interaction: discord.Interaction, button: discord.ui.Button):
-        button.disabled = True
-        for child in self.children:
-            child.disabled = True
-        await interaction.response.edit_message(view=self)
+#     @discord.ui.button(label='Agree', style=discord.ButtonStyle.success)
+#     async def agree(self, interaction: discord.Interaction, button: discord.ui.Button):
+#         button.disabled = True
+#         for child in self.children:
+#             child.disabled = True
+#         await interaction.response.edit_message(view=self)
 
-        try:
-            await self.author.send()
-        except discord.Forbidden:
-            await interaction.followup.send(f'<@{self.author.id}> Registration failed as PaigeBot is unable to DM you. Please ensure your privacy settings allow DMs from this server!', ephemeral=False)
-            return
-        except discord.HTTPException:
-            pass 
+#         try:
+#             await self.author.send()
+#         except discord.Forbidden:
+#             await interaction.followup.send(f'<@{self.author.id}> Registration failed as PaigeBot is unable to DM you. Please ensure your privacy settings allow DMs from this server!', ephemeral=False)
+#             return
+#         except discord.HTTPException:
+#             pass 
 
-        with open('secret_santa_registration.json', 'r') as feedsjson:
-            file = json.load(feedsjson)
+#         with open('secret_santa_registration.json', 'r') as feedsjson:
+#             file = json.load(feedsjson)
 
-        file[self.author.id] = {
-            'info': {
-                'name': self.author.name,
-                'id': self.author.id,
-                'wishlist': self.wishlist
-            },
-            'assigned': {}
-        }
+#         file[self.author.id] = {
+#             'info': {
+#                 'name': self.author.name,
+#                 'id': self.author.id,
+#                 'wishlist': self.wishlist
+#             },
+#             'assigned': {}
+#         }
 
-        with open("secret_santa_registration.json", "w") as f:
-            json.dump(file, f, indent=4)
+#         with open("secret_santa_registration.json", "w") as f:
+#             json.dump(file, f, indent=4)
         
-        role = self.ctx.guild.get_role(role_secretsanta)
-        await self.author.add_roles(role)
+#         role = self.ctx.guild.get_role(role_secretsanta)
+#         await self.author.add_roles(role)
         
-        await interaction.followup.send(f'<@{self.author.id}> you have registered for SGM Secret Santa!', ephemeral=False)
+#         await interaction.followup.send(f'<@{self.author.id}> you have registered for SGM Secret Santa!', ephemeral=False)
     
-    @discord.ui.button(label='Cancel', style=discord.ButtonStyle.danger)
-    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
-        button.disabled = True
-        for child in self.children:
-            child.disabled = True
-        await interaction.response.edit_message(view=self)
-        await interaction.followup.send(f'{self.author.name}\'s registration was cancelled.', ephemeral=False)
+#     @discord.ui.button(label='Cancel', style=discord.ButtonStyle.danger)
+#     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+#         button.disabled = True
+#         for child in self.children:
+#             child.disabled = True
+#         await interaction.response.edit_message(view=self)
+#         await interaction.followup.send(f'{self.author.name}\'s registration was cancelled.', ephemeral=False)
 
-@bot.command()
-async def secretsanta(ctx, wishlist_link=None):
+# @bot.command()
+# async def secretsanta(ctx, wishlist_link=None):
 
-    with open('secret_santa_registration.json', 'r+') as feedsjson:
-        file = json.load(feedsjson)
+#     with open('secret_santa_registration.json', 'r+') as feedsjson:
+#         file = json.load(feedsjson)
 
-    if [key for key, val in file.items() if val.get('assigned')]:
-        await ctx.send(f'Registration phase has ended!')
-        return
-    if not wishlist_link:
-        await ctx.send(f'Argument missing - please include your wishlist link (`{prefixes[0]}secretsanta wishlist_link`)')
-        return
-    if not validators.url(wishlist_link):
-        await ctx.send(f'Argument `wishlist_link` (`{wishlist_link}`) is not a valid URL.')
-        return
+#     if [key for key, val in file.items() if val.get('assigned')]:
+#         await ctx.send(f'Registration phase has ended!')
+#         return
+#     if not wishlist_link:
+#         await ctx.send(f'Argument missing - please include your wishlist link (`{prefixes[0]}secretsanta wishlist_link`)')
+#         return
+#     if not validators.url(wishlist_link):
+#         await ctx.send(f'Argument `wishlist_link` (`{wishlist_link}`) is not a valid URL.')
+#         return
     
-    if file.get(str(ctx.author.id)):
-        await ctx.send(f'<@{ctx.author.id}> you are already registered for SGM Secret Santa!')
-        return
+#     if file.get(str(ctx.author.id)):
+#         await ctx.send(f'<@{ctx.author.id}> you are already registered for SGM Secret Santa!')
+#         return
 
-    view = SecretSantaButtons(ctx, wishlist=wishlist_link, role=ctx.guild.get_role(role_secretsanta))
+#     view = SecretSantaButtons(ctx, wishlist=wishlist_link, role=ctx.guild.get_role(role_secretsanta))
 
-    await ctx.send(f"""
-By signing up for SGM Secret Santa, you commit to the following if your application is accepted:
-- Spending a minimum of $10.00 USD (sales/discounts allowed) on Steam gift(s) and/or key(s) from your randomly assigned participant's wishlist as their gift.
-- Promise to put genuine effort in purchasing what you truly believe will make your assigned participant happier.
-- Understand that the same is expected by another random participant who will be your secret Santa, but that we cannot guarantee the quality or desirability of the gift you receive.
-- Make sure your wishlist has a variety of games at different price points. (No picking the most popular or expensive ones!) You will not commit any major changes to your wishlist which would greatly limit your secret Santa's options.
-- While not enforced, we encourage playing the game or games gifted to you by your secret Santa.
-- Your DMs must be open to members of this server, or you must have a DM open with PaigeBot, so that you may receive updates and instructions privately.
+#     await ctx.send(f"""
+# By signing up for SGM Secret Santa, you commit to the following if your application is accepted:
+# - Spending a minimum of $10.00 USD (sales/discounts allowed) on Steam gift(s) and/or key(s) from your randomly assigned participant's wishlist as their gift.
+# - Promise to put genuine effort in purchasing what you truly believe will make your assigned participant happier.
+# - Understand that the same is expected by another random participant who will be your secret Santa, but that we cannot guarantee the quality or desirability of the gift you receive.
+# - Make sure your wishlist has a variety of games at different price points. (No picking the most popular or expensive ones!) You will not commit any major changes to your wishlist which would greatly limit your secret Santa's options.
+# - While not enforced, we encourage playing the game or games gifted to you by your secret Santa.
+# - Your DMs must be open to members of this server, or you must have a DM open with PaigeBot, so that you may receive updates and instructions privately.
                    
-<@{ctx.author.id}> Do you agree to these terms and would like to complete your application/registration?
-""",
-    view=view)
+# <@{ctx.author.id}> Do you agree to these terms and would like to complete your application/registration?
+# """,
+#     view=view)
     
-    await view.wait()
+#     await view.wait()
+
+# @bot.command()
+# async def ssadmin(ctx, arg=None):
+#     if not arg:
+#         await ctx.send("Secret Santa administration commands:\n- `list` - Lists the current registrations.\n- `finalize` - Ends registration phase, and assigns each user to another user.")
+
+#     with open('secret_santa_registration.json', 'r+') as feedsjson:
+#         registrations = json.load(feedsjson)
+    
+#     if arg.lower() == 'list':
+#         embed = discord.Embed(title="Registrations")
+
+#         for userid in registrations:
+
+#             name = registrations[userid]['info']['name']
+#             wishlist = registrations[userid]['info']['wishlist']
+        
+#             embed.add_field(
+#                 name=name,
+#                 value=wishlist,
+#                 inline=False
+#             )
+        
+#         await ctx.send(embed=embed)
+#         return
+    
+#     elif arg.lower() == 'finalize':
+
+#         keys = list(registrations.keys())
+#         random.shuffle(keys)
+
+#         for i, userid in enumerate(keys):
+
+#             registrations[userid]['assigned'] = registrations[keys[i-1]]['info']
+#             member=bot.get_user(int(userid))
+#             assigned_user = registrations[userid]['assigned']
+#             try:
+#                 await member.send(f"""
+# Hello there!
+
+# The Secret Santa registration phase has ended, and you have been assigned your recipient!
+
+# Recipient: {assigned_user['name']}
+# Wishlist: <{assigned_user['wishlist']}>
+
+# Now is the time to have a look at their wishlist (or feel free to look at their message history on SGM, profile(s), etc) to determine what would be the best game or games to offer them as a Christmas gift. Once you've chosen the perfect gift, you can contact them to give them the keys or Steam gifts through your preferred medium (be it Steam, Discord, or other) any time between today and December 25th.
+
+# Remember, don't reveal that you are your recipient's Secret Santa until you're ready to give them their gift! That's the "secret" part of it.
+
+# As a reminder of our guidelines:
+# - Spend a minimum of $10.00 USD (sales/discounts allowed) on Steam gift(s) and/or key(s) from your randomly assigned recipient's wishlist as their gift.
+# - Put genuine effort in purchasing what you truly believe will make your assigned recipient happier.
+# """)
+#             except:
+#                 await ctx.send(f"DM to <@{member.id}> failed due to privacy or permission settings!")
+
+#         with open("secret_santa_registration.json", "w") as f:
+#             json.dump(registrations, f, indent=4)
 
 @bot.command()
-async def ssadmin(ctx, arg=None):
-    if not arg:
-        await ctx.send("Secret Santa administration commands:\n- `list` - Lists the current registrations.\n- `finalize` - Ends registration phase, and assigns each user to another user.")
+async def hltb(ctx, *query):
 
-    with open('secret_santa_registration.json', 'r+') as feedsjson:
-        registrations = json.load(feedsjson)
+    query_string = ' '.join(query)
+
+    results_list = await HowLongToBeat().async_search(query_string)
+    if results_list is not None and len(results_list) > 0:
+        best_element = max(results_list, key=lambda element: element.similarity)
+
+        embed = discord.Embed(title=best_element.game_name, url=best_element.game_web_link)
+
+        embed.add_field(
+            name="Main Story",
+            value=best_element.main_story
+        )
+        embed.add_field(
+            name="Main + Extra",
+            value=best_element.main_extra
+        )
+        embed.add_field(
+            name="Completionist",
+            value=best_element.completionist
+        )
+
+        embed.set_image(url=best_element.game_image_url)
     
-    if arg.lower() == 'list':
-        embed = discord.Embed(title="Registrations")
-
-        for userid in registrations:
-
-            name = registrations[userid]['info']['name']
-            wishlist = registrations[userid]['info']['wishlist']
-        
-            embed.add_field(
-                name=name,
-                value=wishlist,
-                inline=False
-            )
-        
+        # await ctx.send(f"main_story: {best_element.main_story}\nmain_extra: {best_element.main_extra}\ncompletionist: {best_element.completionist}")
         await ctx.send(embed=embed)
-        return
     
-    elif arg.lower() == 'finalize':
-
-        keys = list(registrations.keys())
-        random.shuffle(keys)
-
-        for i, userid in enumerate(keys):
-
-            registrations[userid]['assigned'] = registrations[keys[i-1]]['info']
-            member=bot.get_user(int(userid))
-            assigned_user = registrations[userid]['assigned']
-            try:
-                await member.send(f"""
-Hello there!
-
-The Secret Santa registration phase has ended, and you have been assigned your recipient!
-
-Recipient: {assigned_user['name']}
-Wishlist: <{assigned_user['wishlist']}>
-
-Now is the time to have a look at their wishlist (or feel free to look at their message history on SGM, profile(s), etc) to determine what would be the best game or games to offer them as a Christmas gift. Once you've chosen the perfect gift, you can contact them to give them the keys or Steam gifts through your preferred medium (be it Steam, Discord, or other) any time between today and December 25th.
-
-Remember, don't reveal that you are your recipient's Secret Santa until you're ready to give them their gift! That's the "secret" part of it.
-
-As a reminder of our guidelines:
-- Spend a minimum of $10.00 USD (sales/discounts allowed) on Steam gift(s) and/or key(s) from your randomly assigned recipient's wishlist as their gift.
-- Put genuine effort in purchasing what you truly believe will make your assigned recipient happier.
-""")
-            except:
-                await ctx.send(f"DM to <@{member.id}> failed due to privacy or permission settings!")
-
-        with open("secret_santa_registration.json", "w") as f:
-            json.dump(registrations, f, indent=4)
+    else:
+        await ctx.send("No result found!")
 
 # HELP COMMANDS
 
@@ -3973,7 +4006,10 @@ async def help(ctx, query=None):
          "View PaigeBot and other fun server-wide statistics."),
         
         ("gtp (aliases: `tpir`)",
-         "Begin a \"The Price Is Right\" inspired minigame, \"Guess the Price\"! Complete to guess as closely to the winning bid price (USD) of a random Ebay auction.")
+         "Begin a \"The Price Is Right\" inspired minigame, \"Guess the Price\"! Complete to guess as closely to the winning bid price (USD) of a random Ebay auction."),
+
+        ("hltb `query`",
+         "Fetches How Long To Beat data for the best match of `query`.")
     ]
 
     mod_commands_list = [
