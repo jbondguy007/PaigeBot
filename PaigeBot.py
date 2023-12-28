@@ -744,11 +744,17 @@ async def on_command_completion(ctx):
     await achievement(ctx=ctx, achievement_ids=['misc_first_interact'])
     statistics("Commands count")
     if random.random() < 0.001:
-        # Append a unique query parameter to the URL to prevent caching
-        url = f'https://cataas.com/cat?{random.random()}'
+
+        api_url = 'https://api.thecatapi.com/v1/images/search'
+        r = requests.get(api_url)
+        data = r.json()
+        print(data)
+        url = data[0]['url']
+
         embed = discord.Embed(title="Easter Egg", description="There is roughly 1 in 1000 chance of you getting a random cat picture when issuing a command. Congrats!", color=gold_color)
         embed.set_image(url=url)
         await ctx.send(embed=embed)
+
         await achievement(ctx=ctx, achievement_ids=['misc_easter_egg_cat'])
         statistics("Easter Egg cat triggered")
 
@@ -2170,7 +2176,7 @@ async def tc_add(user_ID, card_ID, ctx):
         )
 
     # tc_misc_getself
-    if user_ID == re.search("\d+", card_ID)[0]:
+    if player == re.search("\d+", card_ID)[0]:
         await achievement(ctx=ctx, achievement_ids=['tc_misc_getself'])
     
     # tc_misc_getdup
@@ -3275,7 +3281,7 @@ async def bug(ctx, *report):
 
     statistics("PaigeBot bugs/suggestions submitted")
 
-@bot.command()
+@bot.command(aliases=['suggest'])
 async def suggestion(ctx, *report):
     report = ' '.join(report)
 
@@ -3593,6 +3599,12 @@ async def gtp(ctx):
     r = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64"})
     soup = bs(r.content, "html.parser")
     categories_raw = [(re.search('^(.+?) \[', option.text[2:]).group(1), int(option['value'])) for option in soup.find(id="select_bcat").find_all('option')][1:]
+
+    if not categories_raw:
+        await ctx.send("Error: Failed to fetch categories list! Please try again.")
+        prevent_gtp_command = False
+        return
+
     categories = [cat for cat in categories_raw if not cat[0].startswith("Motors:")]
     motors_cat = [cat for cat in categories_raw if cat[0].startswith("Motors:")]
     random_motor = random.choice(motors_cat)
@@ -3987,7 +3999,7 @@ async def help(ctx, query=None):
         ("bug `message`",
          f"Logs a bug report. Please include details as `message` - example: `{prefixes[0]}bug The trading card guide has a typo in the rarity sections.`"),
         
-        ("suggestion `message`",
+        ("suggestion (aliases: `suggest`) `message`",
          f"Logs a suggestion. Please include details as `message` - example: `{prefixes[0]}suggestion Make the help menu less chaotic.`"),
 
         ("reports (aliases: `buglog`) `clear` `bugs` `suggestions`",
