@@ -2119,7 +2119,7 @@ def binder_generator(user, include_legacy=False, only_legacy=False):
             binder = f'binder{binder_count}'
             returned_value.append(binder)
             base_img.save(f'tradingcards/generated/{binder}.png')
-            base_img  = Image.new( mode = "RGBA", size = (xsize*col, ysize*row) )
+            base_img  = Image.new( mode = "RGBA", size = ((xsize+padding)*col+padding, (ysize+padding)*row+padding), color = binder_bg_color )
             binder_count += 1
             lines = 1
             x = 0
