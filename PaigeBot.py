@@ -2122,8 +2122,8 @@ def binder_generator(user, include_legacy=False, only_legacy=False):
             base_img  = Image.new( mode = "RGBA", size = ((xsize+padding)*col+padding, (ysize+padding)*row+padding), color = binder_bg_color )
             binder_count += 1
             lines = 1
-            x = 0
-            y = 0
+            x = 0+padding
+            y = 0+padding
             continue
 
         elif len(player_collection) == items:
