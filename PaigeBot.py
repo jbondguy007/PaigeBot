@@ -14,6 +14,7 @@ import random
 import boto3
 import traceback
 import validators
+import urllib.parse
 # import country_converter as coco
 
 from datetime import date, datetime, timedelta
@@ -79,8 +80,8 @@ allowed_roles = [role_gamenight, role_paigebotchangelog]
 
 # TODO IF TESTING: Set to arial.ttf
 
-chosen_font = "DejaVuSans.ttf"
-# chosen_font = "arial.ttf"
+# chosen_font = "DejaVuSans.ttf"
+chosen_font = "arial.ttf"
 
 with open("permanent_variables.json", "r") as f:
     permanent_variables = json.load(f)
@@ -464,10 +465,11 @@ def search_magazine_index(query):
     issues = content.find_all("div", {"class": "bb_h1"})
 
     links = content.find_all("a", {"class": "bb_link"})
+
     magazine_links = []
 
     for i, link in enumerate(links):
-        if link.get("href").startswith('https://steamcommunity.com/linkfilter/?url=https://heyzine.com/flip-book/'):
+        if link.get("href").startswith('https://steamcommunity.com/linkfilter/?url=https://heyzine.com/flip-book/') or link.get("href").startswith('https://steamcommunity.com/linkfilter/?u=https%3A%2F%2Fheyzine.com%2Fflip-book%2F'):
             magazine_links.append(link.get("href"))
 
     for i, issue in enumerate(issues):
@@ -478,7 +480,7 @@ def search_magazine_index(query):
                     "title": review.text,
                     "AppID": review.find("a").get("href").split('/')[4],
                     "issue": issue.text,
-                    "issue_link": magazine_links[i].replace("https://steamcommunity.com/linkfilter/?url=", "")
+                    "issue_link": urllib.parse.unquote(magazine_links[i].replace("https://steamcommunity.com/linkfilter/?url=", "").replace("https://steamcommunity.com/linkfilter/?u=", ""))
                 }
                 return game_info
     
@@ -1913,7 +1915,9 @@ def tc_generator(user, holo=True, legacy=False):
     print(f"Generating card {user}...")
 
     if legacy:
-        base_img = Image.open(f"tradingcards/generated/{user}{'_holo' if holo else''}.png").convert('RGBA') # WORKING ON TODO
+        base_img = Image.new( mode = "RGBA", size = (300, 400), color = (255, 255, 255) )
+        card_img = Image.open(f"tradingcards/generated/{user.id}{'_holo' if holo else''}.png").convert('RGBA') # Potentially breaking
+        base_img.paste(card_img, (0, 0), card_img)
         contrast = ImageEnhance.Contrast(base_img)
         base_img = contrast.enhance(0.6)
 
@@ -1927,7 +1931,7 @@ def tc_generator(user, holo=True, legacy=False):
         draw.text((50, 200-font_height), "LEGACY", font=font, fill="black", stroke_width=3, stroke_fill="white")
 
         # Save the resulting image
-        card = f"{user}{'_holo' if holo else ''}"
+        card = f"{user.id}{'_holo' if holo else ''}"
         base_img.save(f'tradingcards/generated/{card}.png')
 
         return card
@@ -1937,7 +1941,7 @@ def tc_generator(user, holo=True, legacy=False):
     user_join_date = user.joined_at.strftime("%m/%d/%Y")
 
     # Setup a base image
-    base_img = Image.new( mode = "RGBA", size = (300, 400) )
+    base_img = Image.new( mode = "RGBA", size = (300, 400), color = (255, 255, 255) )
 
     # Open the profile picture image
     try:
@@ -2066,9 +2070,10 @@ def binder_generator(user, include_legacy=False, only_legacy=False):
 
     if not player_collection:
         raise Exception("Empty binder")
-
-    x = 0
-    y = 0
+    
+    padding = 10
+    x = 0+padding
+    y = 0+padding
     zoom = 1.2
     xsize = int(150.0*zoom)
     ysize = int(200.0*zoom)
@@ -2079,10 +2084,15 @@ def binder_generator(user, include_legacy=False, only_legacy=False):
     binder_count = 1
     returned_value = []
 
+    color_grey = (100, 100, 100, 255)
+    # color_copper = (100, 80, 70, 255)
+
+    binder_bg_color = color_grey
+
     max_per_page = col*row
 
     # Setup a base image
-    base_img  = Image.new( mode = "RGBA", size = (xsize*col, ysize*row) )
+    base_img  = Image.new( mode = "RGBA", size = ((xsize+padding)*col+padding, (ysize+padding)*row+padding), color = binder_bg_color )
 
     for card, info in player_collection.items():
         # Open the card image
@@ -2097,10 +2107,10 @@ def binder_generator(user, include_legacy=False, only_legacy=False):
         base_img.paste(img, (x, y), img)
 
         if lines in [col + i * row for i in range(row)]:
-            y += ysize
-            x = 0
+            y += ysize+padding
+            x = 0+padding
         else:
-            x += xsize
+            x += xsize+padding
         lines += 1
         items += 1
 
@@ -2844,12 +2854,14 @@ async def tc(ctx, *args):
                 )
         
         # elif args[0].lower() == 'prestige':
+        #     player_collection = fetch_player_collection(str(ctx.author.id))
         #     undiscovered_cards = {user.id: {'name': user.name, 'holo': False, 'rarity': '(Undiscovered)'} for user in ctx.guild.members if str(user.id) not in [user for user in all_cards.keys()]}
         #     player_missing_cards = {k: v for k, v in all_cards.items() if k not in player_collection.keys() and not v['holo'] and not v.get('legacy')}
         #     player_missing_cards.update(undiscovered_cards)
+        #     server_members = [x for x in ctx.guild.members]
 
-        #     if player_collection:
-        #         await ctx.send(f"User is not eligible for prestige! Please complete your collection first.\nYou are still missing {len(player_collection.keys())}/{len(server_members)} cards.")
+        #     if player_missing_cards:
+        #         await ctx.send(f"User is not eligible for prestige! Please complete your collection first.\nYou currently have {len(player_collection.keys())}/{len(server_members)} cards.")
         #         return
             
         #     await ctx.send(f"User is eligible for prestige!\nPrestige will **delete** all your cards (except legacy and holo) **including duplicates** and increase your prestige level by 1.\n**This should only be done if you want to reset your trading card collection! Prestige level will not give you anything more than bragging rights.**")
@@ -2859,7 +2871,7 @@ async def tc(ctx, *args):
         #         return m.author == ctx.author and m.content.lower() == "y"
 
         #     try:
-        #         await bot.wait_for("message", check=check, timeout=5.0)
+        #         await bot.wait_for("message", check=check, timeout=15.0)
         #     except asyncio.TimeoutError:
         #         await ctx.send("Command timed out. Operation cancelled.")
         #         return
@@ -2869,8 +2881,7 @@ async def tc(ctx, *args):
         #         if info.get('holo') or info.get('legacy'):
         #             pass
         #         else:
-        #             del database[str(ctx.author.id)][id]
-            
+        #             database[str(ctx.author.id)].pop(id)
 
         # Admin/botmaster commands
 
@@ -3904,11 +3915,18 @@ async def hltb(ctx, *query):
 
         embed.set_image(url=best_element.game_image_url)
     
-        # await ctx.send(f"main_story: {best_element.main_story}\nmain_extra: {best_element.main_extra}\ncompletionist: {best_element.completionist}")
         await ctx.send(embed=embed)
     
     else:
         await ctx.send("No result found!")
+
+# @bot.command()
+# async def pixel(ctx):
+#     # img = Image.new( 'RGB', (250,250), (255,255,255,255) ) # create a new blank image
+#     img = Image.open('pixelpaige.png')
+#     pixels = img.load() # create the pixel map
+
+#     img.size[0]
 
 # HELP COMMANDS
 
