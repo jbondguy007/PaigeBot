@@ -80,8 +80,8 @@ allowed_roles = [role_gamenight, role_paigebotchangelog]
 
 # TODO IF TESTING: Set to arial.ttf
 
-# chosen_font = "DejaVuSans.ttf"
-chosen_font = "arial.ttf"
+chosen_font = "DejaVuSans.ttf"
+# chosen_font = "arial.ttf"
 
 with open("permanent_variables.json", "r") as f:
     permanent_variables = json.load(f)
