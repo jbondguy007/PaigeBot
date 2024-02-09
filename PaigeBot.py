@@ -3796,16 +3796,12 @@ async def reminder(ctx, reminder, *times):
 
     for data in times:
         data = data.strip().lower()
-        print(f"Checking {data}...")
 
         if data.endswith('d'):
-            print("ends with d")
             days = int(data[:-1])
         elif data.endswith('h'):
-            print("ends with h")
             hours = int(data[:-1])
         elif data.endswith('m'):
-            print("ends with m")
             minutes = int(data[:-1])
     
     time_values = {
@@ -3820,7 +3816,8 @@ async def reminder(ctx, reminder, *times):
 
     payload = {
         'reminder': reminder,
-        'timer': time_payload
+        'timer': time_payload,
+        'channel': ctx.channel.id
     }
 
     with open('reminders.json', 'r') as outfile:
@@ -3834,7 +3831,9 @@ async def reminder(ctx, reminder, *times):
     with open('reminders.json', 'w') as f:
         json.dump(reminders, f, indent=4)
 
-    await ctx.send(f"Sure! I will remind you: `{reminder}` in {time_values['days']} day(s), {time_values['hours']} hour(s), and {time_values['minutes']} minute(s).")
+    unix_timestamp = int(time.mktime((time_delta).timetuple()))
+
+    await ctx.send(f"Sure! I will remind you: `{reminder}` in {time_values['days']} day(s), {time_values['hours']} hour(s), and {time_values['minutes']} minute(s) (roughly <t:{unix_timestamp}:R>).")
 
 # HELP COMMANDS
 
@@ -4321,7 +4320,7 @@ async def reminders():
             reminder_timer = datetime.strptime(data['timer'], '%Y-%m-%d %H:%M:%S')
 
             if reminder_timer < now:
-                cha = bot.get_channel(general_channel)
+                cha = bot.get_channel(data['channel'])
                 await cha.send(content=f"<@{userID}> Reminder: {data['reminder']}")
     
                 deletion_list.append( (userID, reminderID) )
