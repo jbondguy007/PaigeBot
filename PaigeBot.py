@@ -3790,6 +3790,22 @@ async def steamsale(ctx):
 @bot.command()
 async def reminder(ctx, reminder, *times):
 
+    if reminder.lower() == 'cancel':
+        timer_ID = times[0]
+
+        with open('reminders.json', 'r') as outfile:
+            reminders = json.load(outfile)
+        
+        try:
+            await ctx.send(f"Reminder `{timer_ID}` (\"{reminders[str(ctx.author.id)][str(timer_ID)]['reminder']}\") cancelled!")
+            del reminders[str(ctx.author.id)][str(timer_ID)]
+            with open('reminders.json', 'w') as f:
+                json.dump(reminders, f, indent=4)
+            return
+        except:
+            await ctx.send(f"Unable to locate a reminder with ID `{timer_ID}`.")
+            return
+
     days = 0
     hours = 0
     minutes = 0
@@ -3833,7 +3849,24 @@ async def reminder(ctx, reminder, *times):
 
     unix_timestamp = int(time.mktime((time_delta).timetuple()))
 
-    await ctx.send(f"Sure! I will remind you: `{reminder}` in {time_values['days']} day(s), {time_values['hours']} hour(s), and {time_values['minutes']} minute(s) (roughly <t:{unix_timestamp}:R>).")
+    await ctx.send(f"Sure! I will remind you: `{reminder}` in {time_values['days']} day(s), {time_values['hours']} hour(s), and {time_values['minutes']} minute(s) (roughly <t:{unix_timestamp}:R>).\nReminder ID: `{ctx.message.id}`")
+
+@bot.command()
+async def reminders(ctx):
+    with open('reminders.json', 'r') as outfile:
+        reminders = json.load(outfile)
+    
+    try:
+        user_reminders = {k: v for k, v in reminders[str(ctx.author.id)].items()}
+        if not user_reminders:
+            raise Exception()
+    except:
+        await ctx.send("User has no reminders.")
+        return
+
+    msg = '\n'.join( [f"`{ID}`: \"{data['reminder']}\" ({data['timer']})" for ID, data in user_reminders.items()] )
+
+    await ctx.send(content=msg)
 
 # HELP COMMANDS
 
@@ -3952,7 +3985,13 @@ async def help(ctx, query=None):
          "Checks the current ongoing Steam sale/event, and what and when the next sale/event will occur."),
 
         ("reminder `\"reminder\"` `1d` `1h` `1m`",
-         "Sets a reminder for the user. Reminder must be in quotes, followed by day(s), hour(s), and minute(s) in the format Xd Xh Xm where X are integers. All are optional, but at least one value must be provided.")
+         "Sets a reminder for the user. Reminder must be in quotes, followed by day(s), hour(s), and minute(s) in the format Xd Xh Xm where X are integers. All are optional, but at least one value must be provided."),
+
+        ("reminder `cancel` `reminder_ID`",
+         "Cancels reminder with ID `reminder_ID`."),
+        
+        ("reminders",
+         "Lists user's reminders.")
     ]
 
     mod_commands_list = [
