@@ -150,6 +150,8 @@ def upload_backups():
         'achievements.json',
         'achievements_usersdata.json',
         'statistics.json',
+        'reminders.json',
+        'mine.json',
         'tradingcards/cards.json',
         'tradingcards/database.json',
         'tradingcards/tc_checkin.json',
@@ -609,7 +611,7 @@ def get_user_from_username(username):
                 return member
     return False
 
-async def achievement(ctx, achievement_ids, who=None, dontgrant=False, backtrack=False):
+async def achievement(ctx, achievement_ids, who=None, dontgrant=False, backtrack=False, count=1):
     if who:
         user = str(who)
     else:
@@ -641,13 +643,13 @@ async def achievement(ctx, achievement_ids, who=None, dontgrant=False, backtrack
         
         if backtrack and achievements_log[user][achievement_id]['counter'] > 0:
             # Count down on achievement
-            achievements_log[user][achievement_id]['counter'] -= 1
+            achievements_log[user][achievement_id]['counter'] -= count
         else:
             # Count up on achievement
-            achievements_log[user][achievement_id]['counter'] += 1
+            achievements_log[user][achievement_id]['counter'] += count
 
         # If goal not reached, return
-        if not achievements_log[user][achievement_id]['counter'] == achievement['goal']:
+        if not achievements_log[user][achievement_id]['counter'] >= achievement['goal']:
             with open("achievements_usersdata.json", "w") as f:
                 json.dump(achievements_log, f, indent=4)
             continue
@@ -656,6 +658,7 @@ async def achievement(ctx, achievement_ids, who=None, dontgrant=False, backtrack
             continue
         
         achievements_log[user][achievement_id]['unlocked_date'] = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+        achievements_log[user][achievement_id]['counter'] = achievement['goal']
 
         with open("achievements_usersdata.json", "w") as f:
             json.dump(achievements_log, f, indent=4)
@@ -711,6 +714,7 @@ async def on_ready():
         check_for_new_giveaways.start()
         daily_notifier.start()
         reminders.start()
+        mine_process.start()
 
 @bot.event
 async def on_command_error(ctx, error):
@@ -1386,7 +1390,7 @@ async def slots(ctx):
     view.message = await ctx.author.send(f"Would you like to reveal the key for {prize['title']}, or redistribute it to the prize pool? (5 minutes until automatically revealed)",view=view)
 
 @bot.command()
-async def slotskey(ctx, *, args:commands.clean_content(fix_channel_mentions=False, use_nicknames=False)=None):
+async def slotskey(ctx, *, args:commands.clean_content(fix_channel_mentions=False, use_nicknames=False)=None): # type: ignore
 
     if not args:
         await ctx.send(f"The `slotskey` command allows you to add a key drop to the prize pool of the `slots` command.\nPlease send me the command as `{prefixes[0]}slotskey activation-key-here, platform, Title Here` in a DM.")
@@ -3787,7 +3791,7 @@ async def steamsale(ctx):
 
     await ctx.send(f"{current_sale}\n\n{next_sale}")
 
-@bot.command()
+@bot.command(aliases=[ 'remind' ])
 async def reminder(ctx, reminder, *times):
 
     if reminder.lower() == 'cancel':
@@ -3803,7 +3807,7 @@ async def reminder(ctx, reminder, *times):
                 json.dump(reminders, f, indent=4)
             return
         except:
-            await ctx.send(f"Unable to locate a reminder with ID `{timer_ID}`.")
+            await ctx.send(f"Unable to locate a reminder with ID `{timer_ID}` in your reminders.")
             return
 
     days = 0
@@ -3851,6 +3855,19 @@ async def reminder(ctx, reminder, *times):
 
     await ctx.send(f"Sure! I will remind you: `{reminder}` in {time_values['days']} day(s), {time_values['hours']} hour(s), and {time_values['minutes']} minute(s) (roughly <t:{unix_timestamp}:R>).\nReminder ID: `{ctx.message.id}`")
 
+    await achievement(
+        ctx=ctx,
+        achievement_ids=[
+            'reminder_count_1',
+            'reminder_count_10',
+            'reminder_count_25',
+            'reminder_count_50',
+            'reminder_count_100'
+        ]
+    )
+
+    statistics("Reminders set")
+
 @bot.command()
 async def reminders(ctx):
     with open('reminders.json', 'r') as outfile:
@@ -3867,6 +3884,348 @@ async def reminders(ctx):
     msg = '\n'.join( [f"`{ID}`: \"{data['reminder']}\" ({data['timer']})" for ID, data in user_reminders.items()] )
 
     await ctx.send(content=msg)
+
+# production starts at 15% of cost for miner, incrementing by 2% each item
+crew_values = {
+    'miner': {
+        'cost': 40,
+        'production': 3 # 15%
+    },
+    'jackhammer': {
+        'cost': 120,
+        'production': 10 # 17%
+    },
+    'drill': {
+        'cost': 400,
+        'production': 38 # 19%
+    },
+    'excavator': {
+        'cost': 1000,
+        'production': 105 # 21%
+    },
+    'jumbo drill': {
+        'cost': 4000,
+        'production': 460 # 23%
+    },
+    'jumbo excavator': {
+        'cost': 20000,
+        'production': 2500 # 25%
+    }
+}
+
+with open('permanent_variables.json', 'r') as outfile:
+    persistent_data = json.load(outfile)
+gems_value_multi = persistent_data['gems_multi']
+
+@bot.command()
+async def mine(ctx, *args):
+
+    # Initiate user in file
+    with open('mine.json', 'r') as outfile:
+        mine_file = json.load(outfile)
+    if str(ctx.author.id) not in mine_file:
+
+        mine_file[str(ctx.author.id)] = {
+            'assets': {
+                'gems': 0,
+                'money': 40
+            },
+            'crew': {
+                'miner': 0,
+                'jackhammer': 0,
+                'drill': 0,
+                'excavator': 0,
+                'jumbo drill': 0,
+                'jumbo excavator': 0
+            }
+        }
+        with open('mine.json', 'w') as f:
+            json.dump(mine_file, f, indent=4)
+
+    if args:
+
+        arg = args[0]
+
+        if arg.lower() == 'shop':
+
+            with open('mine.json', 'r') as outfile:
+                mine_data = json.load(outfile)
+                user_data = mine_data[str(ctx.author.id)]
+
+            embed = discord.Embed(title=f"{ctx.author.name}'s Mine Shop", description=f"Money: $ {user_data['assets']['money']}", color=bot_color)
+
+            for crew, crew_info in crew_values.items():
+                cost_mult = crew_info['cost']*user_data['crew'][crew]*0.25
+                cost = int(crew_info['cost']+cost_mult)
+                embed.add_field(
+                    name=crew.title(),
+                    value=f"Cost: $ {cost}\nproduction: {crew_info['production']} 💎/5min",
+                    inline=False
+                )
+            
+            await ctx.send(embed=embed)
+            return
+        
+        elif arg.lower() == 'buy':
+            try:
+                what = args[1].lower()
+                # count = int(arg[3])
+            except:
+                await ctx.send(f"Error: Missing crew type argument.")
+                return
+            
+            with open('mine.json', 'r') as outfile:
+                mine_data = json.load(outfile)
+                user_data = mine_data[str(ctx.author.id)]
+
+            cost_mult = crew_values[what]['cost']*user_data['crew'][what]*0.25
+            cost = int(crew_values[what]['cost']+cost_mult)
+
+            if cost <= mine_data[str(ctx.author.id)]['assets']['money']:
+                mine_data[str(ctx.author.id)]['assets']['money'] -= cost
+                mine_data[str(ctx.author.id)]['crew'][what] += 1
+                new_cost_mult = crew_values[what]['cost']*user_data['crew'][what]*0.35
+                new_cost = int(crew_values[what]['cost']+new_cost_mult)
+                await ctx.send(f"Purchased `{what}` for `{cost}`. Unit price has increased to `$ {new_cost}`. Your funds are now `$ {mine_data[str(ctx.author.id)]['assets']['money']}`.")
+                with open('mine.json', 'w') as f:
+                    json.dump(mine_data, f, indent=4)
+                statistics("Idle Mine crew purchased")
+                await achievement(
+                    ctx=ctx,
+                    achievement_ids=[
+                        "mine_crew_hired_1",
+                        "mine_crew_hired_5",
+                        "mine_crew_hired_10",
+                        "mine_crew_hired_25",
+                        "mine_crew_hired_50",
+                        "mine_crew_hired_100",
+                        "mine_crew_hired_250"
+                    ]
+                )
+            else:
+                await ctx.send(f"You can't afford `{what}` for `$ {cost}`. Your funds: `$ {mine_data[str(ctx.author.id)]['assets']['money']}`")
+            
+            return
+        
+        elif arg.lower() == 'sell':
+            with open('mine.json', 'r') as outfile:
+                mine_data = json.load(outfile)
+                user_data = mine_data[str(ctx.author.id)]
+            
+            gems = user_data['assets']['gems']
+            
+            if not gems:
+                await ctx.send("You have no 💎 gems to sell!")
+                return
+            
+            earning = int(gems*gems_value_multi)
+
+            mine_data[str(ctx.author.id)]['assets']['gems'] = 0
+            mine_data[str(ctx.author.id)]['assets']['money'] += earning
+
+            with open('mine.json', 'w') as f:
+                json.dump(mine_data, f, indent=4)
+
+            await ctx.send(f"Sold `💎 {gems}` gems for `$ {earning}` at `$ {format(gems_value_multi, '.2f')}/💎 gem` market price!")
+
+            statistics("Idle Mine money earned", earning)
+            await achievement(
+                ctx=ctx,
+                count=gems,
+                achievement_ids=[
+                    "mine_gems_mined_1",
+                    "mine_gems_mined_100",
+                    "mine_gems_mined_500",
+                    "mine_gems_mined_2k",
+                    "mine_gems_mined_5k",
+                    "mine_gems_mined_20k",
+                    "mine_gems_mined_100k",
+                    "mine_gems_mined_500k",
+                    "mine_gems_mined_1m",
+                    "mine_gems_mined_10m",
+                    "mine_gems_mined_100m",
+                    "mine_gems_mined_1b"
+                ]
+            )
+            await achievement(
+                ctx=ctx,
+                count=earning,
+                achievement_ids=[
+                    "mine_money_earned_20",
+                    "mine_money_earned_100",
+                    "mine_money_earned_500",
+                    "mine_money_earned_2k",
+                    "mine_money_earned_5k",
+                    "mine_money_earned_20k",
+                    "mine_money_earned_100k",
+                    "mine_money_earned_500k",
+                    "mine_money_earned_1m",
+                    "mine_money_earned_10m",
+                    "mine_money_earned_100m",
+                    "mine_money_earned_1b",
+                ]
+            )
+
+            return
+        
+        elif arg.lower() == 'market':
+            if gems_value_multi > 1.0:
+                highlight = '+ '
+            else:
+                highlight = '- '
+            await ctx.send(f"{'The market is good! Time to sell!' if highlight == '+ ' else 'The market is not great, better wait it out.'}\n```diff\n{highlight}💎1 = $ {format(gems_value_multi, '.2f')}\n```")
+
+            return
+
+        else:
+            await ctx.send(f"Argument `{arg}` is not recognized.")
+            return
+    
+    with open('mine.json', 'r') as outfile:
+        mine_data = json.load(outfile)
+
+    user_data = mine_data[str(ctx.author.id)]
+    
+    embed = discord.Embed(title=f"{ctx.author.name}'s Mine", color=bot_color)
+
+    earnings = {}
+    for crew, crew_count in user_data['crew'].items():
+        earnings[crew] = (crew_count*crew_values[crew]['production'])
+    earnings_sum = sum(earnings.values())
+    embed.add_field(
+            name="Gems",
+            value=f"💎 {user_data['assets']['gems']} (+{earnings_sum}/5min)",
+            inline=False
+        )
+    
+    embed.add_field(
+            name="Money",
+            value=f"$ {user_data['assets']['money']}",
+            inline=False
+        )
+    
+    for crew, count in user_data['crew'].items():
+        embed.add_field(
+            name=f"{crew.title()} (+{crew_values[crew]['production']} 💎/5min)",
+            value=f"{count} (+{earnings[crew]} 💎/5min)",
+            inline=False
+        )
+    
+    await ctx.send(embed=embed)
+
+@bot.command()
+async def mineguide(ctx):
+    embed = discord.Embed(title="Idle Mine Guide", description="`mine` command guide", color=bot_color)
+    embed.add_field(
+        name="Introduction",
+        value="Well hello there, pioneer of the gemstones mining industry! You've just received your documents authorizing mining activity on your plot of land, you have $40 in allocated funds, and your heart burns with a fire only a [REDACTED] citizen can have! Let's get down to business - our great nation has just gotten out of yet another conflict with the neighbours across the border, and the coffers are empty. The nation of [REDACTED] needs money, and under our feet are billions of dollars' worth of gems, waiting to be plucked out. So let's get to work, eh?",
+        inline=False
+    )
+    embed.add_field(
+        name="About",
+        value="Idle Mine is a Discord idling game. Purchase \"crew\" with money, produce gems, sell them, and use your newfound wealth to expand your crew and mine faster!\n\nIssue the `mine` command to view your mine. Arguments can be included after the command to interact (see below).",
+        inline=False
+    )
+    embed.add_field(
+        name="Command Arguments",
+        value=f"""- `shop` - View the shop to buy crew.
+- `buy` `crew` - Exchange money for the specified `crew` (see `shop` for details). Example: `buy "jumbo drill"`
+- `sell` - Sell your gems for money at current market price (see `market` for market price before selling)
+- `market` - Displays the current `gem -> money` exchange rate.
+        """,
+        inline=False
+    )
+    embed.add_field(
+        name="Market",
+        value="The gems market can be profitable, but also treacherous! In an ever-volatile world, dealing in gemstones can be a fickle matter. Keep an eye on the `market` pricing, and potentially reconsider selling your gems during moments of low exchange rates to maximize profit. The market pricing of gems will occasionally change an average of 3-4 times a day and the lovely people at our government-approved news outlet will give us a heads up when it happens, but the exact timing is a mystery. Stay on your toes, and move fast!",
+        inline=False
+    )
+
+    await ctx.send(embed=embed)
+
+@tasks.loop(minutes=5)
+async def mine_process():
+
+    global gems_value_multi
+
+    if random.random() < 0.03: # (24 * 60 / 5) * 0.03 = 8.64 average triggers per 24h at 5m intervals
+        gems_value_multi_to_apply = random.randint(-25, 25)/100.0
+        gems_value_multi = round(1.0+gems_value_multi_to_apply, 2)
+
+        with open('permanent_variables.json', 'r') as outfile:
+            persistent_data = json.load(outfile)
+        persistent_data['gems_multi'] = gems_value_multi
+
+        with open('permanent_variables.json', 'w') as f:
+            json.dump(persistent_data, f)
+
+        if gems_value_multi > 1.0:
+            highlight = '+ '
+            random_messages = [
+                "There is a sudden change in the gems market during a boom in engagements causing wedding rings demands.",
+                "A mine in a faraway country has flooded and been shutdown, resulting in increased value.",
+                "A royalty in a foreign country has had an interview showing off their gems collection, increasing their popularity.",
+                "A small country to the East has crowned a new King, the dazzling crown popularizing gemstones.",
+                "Breaking news in the fashion industry - Gemstones are the hot new thing!",
+                "The government has decreased taxes on commodities. Gems are hot buys on the market.",
+                "Across the border, the royal family has commissioned a ridiculous artwork made purely of gems, causing a shortage.",
+                "Our majestic country's government is introducing new exhibits to the Museum of Fine Gems, and is buying them by the buckets.",
+                "A rival mine has suffered a tragic collapse. They have shut down operations, decreasing supplies.",
+                "TV star Alexan Dryte is promoting his personal line of exclusive jewelry, increasing sales and demand for raw gems.",
+                "Renowned gemologist discovers a rare and previously unknown gemstone species, creating a frenzy in the collector's market.",
+                "A scam convincing citizens that certain gems possess unique healing properties leads to an increased demand.",
+                "A famous movie director announces an upcoming blockbuster featuring a plot centered around precious gemstones, sparking a surge in interest.",
+                "Archaeologists unearth a hidden ancient civilization adorned with exquisite gemstone artifacts, driving collectors to seek similar pieces.",
+                "Environmental concerns lead to a shift in consumer preferences towards sustainable and ethically sourced gems, boosting the value of responsibly mined stones.",
+                "Global climate change affects gemstone formations, making certain varieties even rarer and more valuable.",
+                "A breakthrough in technology allows for the creation of hyper-realistic gemstone replicas, increasing appreciation for authentic gems.",
+                "A fashion icon declares gem-embedded accessories as a must-have trend, driving demand for unique and high-quality gemstones.",
+                "An influencer starts a viral challenge to showcase their favorite gemstones, creating a social buzz and increasing gemstone desirability."
+                "The government has commandeered mining equipment from a rival mining company to stage a rescue after the collapse of a [REDACTED] in [REDACTED]",
+            ]
+        else:
+            highlight = '- '
+            random_messages = [
+                "A mine in a faraway land has discovered an enormous gems vein. The increase in supply has resulted in reduced demands.",
+                "The government is increasing taxes on commodities, resulting in a decrease on the trading of gemstones.",
+                "A neighboring country has imposed sanctions on the exchange of gemstones following a dispute with our country.",
+                "Stormy season is causing disruptions in shipping of commodities. Traders are halting all trading until further notice.",
+                "A typographical error at the stock exchange caused a panic. Traders are liquidating their stocks in gems.",
+                "Breaking news in the fashion industry - Gemstones are SO uncool. The chic crowd is ditching them.",
+                "Hugely popular TV talk show host Gemina Safire just had a segment encouraging women to stay single. Engagement rings refunds are on the rise.",
+                "A breakthrough in lab-grown gem technology floods the market with affordable alternatives, decreasing demand for natural gemstones.",
+                "Rumors spread about the environmental impact of gemstone mining, leading to a decline in consumer interest and demand.",
+                "An economic recession forces consumers to cut back on luxury purchases, including gemstones, reducing overall market demand.",
+                "A renowned jewelry critic publicly criticizes the quality of recently mined gemstones, causing a loss of confidence among buyers.",
+                "Fashion influencers start promoting minimalistic styles, shifting away from elaborate gemstone accessories and reducing their popularity.",
+                "A major gemstone-producing country introduces regulations to limit exports, flooding the domestic market and reducing international demand.",
+                "Reports surface about unethical labor practices in certain gemstone mines, leading to a consumer boycott and a decrease in sales.",
+                "A new trend emerges in which consumers prefer alternative, non-traditional materials for jewelry, causing a decrease in gemstone sales.",
+                "A documentary highlighting the ecological impact of gemstone extraction gains widespread attention, discouraging purchases of mined gemstones.",
+                "A fictional storyline in a popular television series depicts gemstones as cursed objects, leading viewers to feel reluctant in owning them."
+            ]
+
+        message = random.choice(random_messages)
+
+        cha = bot.get_channel(bot_channel)
+        await cha.send(f"GEMS MARKET UPDATE: {message}\n```diff\n{highlight}💎1 = $ {format(gems_value_multi, '.2f')}\n```")
+
+    with open('mine.json', 'r') as outfile:
+        mine_data = json.load(outfile)
+
+    earnings = []
+    for userID, data in mine_data.items():
+        for crew, crew_count in data['crew'].items():
+            earnings.append(crew_count*crew_values[crew]['production'])
+    
+        earnings = sum(earnings)
+
+        mine_data[str(userID)]['assets']['gems'] += earnings
+
+        statistics("Idle Mine gems mined", earnings)
+
+    with open('mine.json', 'w') as f:
+        json.dump(mine_data, f, indent=4)
 
 # HELP COMMANDS
 
@@ -3984,14 +4343,17 @@ async def help(ctx, query=None):
         ("steamsale (aliases: `nextsale`)",
          "Checks the current ongoing Steam sale/event, and what and when the next sale/event will occur."),
 
-        ("reminder `\"reminder\"` `1d` `1h` `1m`",
+        ("reminder (aliases: `remind`) `\"reminder\"` `1d` `1h` `1m`",
          "Sets a reminder for the user. Reminder must be in quotes, followed by day(s), hour(s), and minute(s) in the format Xd Xh Xm where X are integers. All are optional, but at least one value must be provided."),
 
         ("reminder `cancel` `reminder_ID`",
          "Cancels reminder with ID `reminder_ID`."),
         
         ("reminders",
-         "Lists user's reminders.")
+         "Lists user's reminders."),
+
+        ("mine `shop` `buy` `sell` `market`",
+         f"Play the mining idle game. Non-argument displays your mine's information. See See `mineguide` (`{prefixes[0]}mineguide`) for details.")
     ]
 
     mod_commands_list = [
