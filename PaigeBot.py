@@ -3955,7 +3955,7 @@ async def mine(ctx, *args):
             embed = discord.Embed(title=f"{ctx.author.name}'s Mine Shop", description=f"Money: $ {user_data['assets']['money']}", color=bot_color)
 
             for crew, crew_info in crew_values.items():
-                cost_mult = crew_info['cost']*user_data['crew'][crew]*0.25
+                cost_mult = crew_info['cost']*user_data['crew'][crew]*0.35
                 cost = int(crew_info['cost']+cost_mult)
                 embed.add_field(
                     name=crew.title(),
@@ -3978,7 +3978,7 @@ async def mine(ctx, *args):
                 mine_data = json.load(outfile)
                 user_data = mine_data[str(ctx.author.id)]
 
-            cost_mult = crew_values[what]['cost']*user_data['crew'][what]*0.25
+            cost_mult = crew_values[what]['cost']*user_data['crew'][what]*0.35
             cost = int(crew_values[what]['cost']+cost_mult)
 
             if cost <= mine_data[str(ctx.author.id)]['assets']['money']:
