@@ -4213,8 +4213,8 @@ async def mine_process():
     with open('mine.json', 'r') as outfile:
         mine_data = json.load(outfile)
 
-    earnings = []
     for userID, data in mine_data.items():
+        earnings = []
         for crew, crew_count in data['crew'].items():
             earnings.append(crew_count*crew_values[crew]['production'])
     
