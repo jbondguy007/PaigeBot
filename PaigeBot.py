@@ -30,6 +30,7 @@ from botocore.exceptions import ClientError, NoCredentialsError
 from re import sub
 from decimal import Decimal
 from howlongtobeatpy import HowLongToBeat
+from math import floor
 
 # BOT INFO
 
@@ -56,6 +57,7 @@ giveaway_notifications_channel = 1086014406091100201
 general_channel = 1067986921487351826
 test_server_channel = 630835643953709066
 test_giveaway_notif_channel = 1079238616049537034
+miners_channel = 1206981787323211836
 
 # Roles
 
@@ -73,10 +75,11 @@ role_bots = 1067986921021788261
 role_gamenight = 1142304222176608340
 role_paigebotchangelog = 1166421373447573595
 role_secretsanta = 1172277564597878854
+role_miners = 1207751182307561533
 
 jbondguy007_userID = 172522306147581952
 
-allowed_roles = [role_gamenight, role_paigebotchangelog]
+allowed_roles = [role_gamenight, role_paigebotchangelog, role_miners]
 
 # TODO IF TESTING: Set to arial.ttf
 
@@ -110,6 +113,15 @@ s3 = boto3.client(
 )
 
 # FUNCTIONS
+
+magnitudeDict={0:'', 1:'K', 2:'M', 3:'B', 4:'T', 5:'Qa', 6:'Qi', 7:'Sx', 8:'Sp', 9:'Oc', 10:'Nm', 11:'Dc'}
+def human_num(num):
+    num=floor(num)
+    magnitude=0
+    while num>=1000.0:
+        magnitude+=1
+        num=num/1000.0
+    return(f'{round(floor(num*100.0)/100.0) if not magnitude else floor(num*100.0)/100.0} {magnitudeDict[magnitude]}')
 
 def upload_backups():
     BUCKET = 'paigebot-backups'
@@ -256,14 +268,14 @@ class Buttons(discord.ui.View):
         self.feeds[self.prize['key']] = self.prize
         # Dump data back to json file
         with open("slots_prizes.json", "w") as f:
-            json.dump(self.feeds, f)
+            json.dump(self.feeds, f, indent=4)
 
 def remove_slot_prize(prize, feeds):
     # Delete the prize from the pool
     del feeds[prize['key']]
     # Dump data back to json file
     with open("slots_prizes.json", "w") as f:
-        json.dump(feeds, f)
+        json.dump(feeds, f, indent=4)
 
 def is_guild_owner():
     def predicate(ctx):
@@ -611,7 +623,7 @@ def get_user_from_username(username):
                 return member
     return False
 
-async def achievement(ctx, achievement_ids, who=None, dontgrant=False, backtrack=False, count=1):
+async def achievement(ctx, achievement_ids, who=None, dontgrant=False, backtrack=False, count=1, wipe=False, reset=False):
     if who:
         user = str(who)
     else:
@@ -641,6 +653,10 @@ async def achievement(ctx, achievement_ids, who=None, dontgrant=False, backtrack
             achievements_log[user][achievement_id] = {}
             achievements_log[user][achievement_id]['counter'] = 0
         
+        # If we are wiping progress on the achievements, reset them to 0
+        if wipe:
+            achievements_log[user][achievement_id]['counter'] = 0
+        
         if backtrack and achievements_log[user][achievement_id]['counter'] > 0:
             # Count down on achievement
             achievements_log[user][achievement_id]['counter'] -= count
@@ -650,6 +666,11 @@ async def achievement(ctx, achievement_ids, who=None, dontgrant=False, backtrack
 
         # If goal not reached, return
         if not achievements_log[user][achievement_id]['counter'] >= achievement['goal']:
+
+            # If we're resetting the count on locked achievements, set them to 0
+            if reset:
+                achievements_log[user][achievement_id]['counter'] = 0
+
             with open("achievements_usersdata.json", "w") as f:
                 json.dump(achievements_log, f, indent=4)
             continue
@@ -709,12 +730,28 @@ async def on_ready():
     with open('statistics.json') as feedsjson:
         glb_stats_at_reboot = json.load(feedsjson)
 
-    if not bot.user.id == 823385752486412290:
-        daily_tasks.start()
-        check_for_new_giveaways.start()
-        daily_notifier.start()
-        reminders.start()
-        mine_process.start()
+    try:
+        if not bot.user.id == 823385752486412290:
+            await daily_tasks.start()
+            await check_for_new_giveaways.start()
+            await daily_notifier.start()
+            await reminders_process.start()
+            await mine_process.start()
+    except:
+        pass
+
+@bot.event
+async def on_connect():
+    print(f"Bot has connected to Discord.")
+    try:
+        if not bot.user.id == 823385752486412290:
+            await daily_tasks.start()
+            await check_for_new_giveaways.start()
+            await daily_notifier.start()
+            await reminders_process.start()
+            await mine_process.start()
+    except:
+        pass
 
 @bot.event
 async def on_command_error(ctx, error):
@@ -733,7 +770,7 @@ async def on_message(message):
     
     if message.author == bot.user:
         return
-    if bot.user.id == 823385752486412290 and message.author.id not in [jbondguy007_userID, 479319946153689098, 279368230777126912, 391705444042670080]:
+    if bot.user.id == 823385752486412290 and message.author.id not in [jbondguy007_userID, 479319946153689098, 279368230777126912, 391705444042670080, 319190839026909184]:
         return
     
     print(f"{message.created_at} | #{message.channel} | @{message.author} | {message.content}\n")
@@ -1432,7 +1469,7 @@ async def slotskey(ctx, *, args:commands.clean_content(fix_channel_mentions=Fals
 
     # Dump check-in data to the json file
     with open("slots_prizes.json", "w") as f:
-        json.dump(feeds, f)
+        json.dump(feeds, f, indent=4)
 
     channel = bot.get_channel(bot_channel)
 
@@ -3249,7 +3286,7 @@ Any card can be holographic, regardless of rarity.
     await ctx.send(embed=embed2)
 
 @bot.command()
-async def role(ctx, role_query):
+async def role(ctx, role_query=None):
 
     roles = await ctx.guild.fetch_roles()
 
@@ -3549,9 +3586,9 @@ async def achievements(ctx, *args):
             progress = ''
             if details['goal'] > 1:
                 if user_achievements.get(ach):
-                    progress = f"({user_achievements[ach]['counter']}/{details['goal']})"
+                    progress = f"({user_achievements[ach]['counter']:,}/{details['goal']:,})"
                 else:
-                    progress = f"(0/{details['goal']})"
+                    progress = f"(0/{details['goal']:,})"
             
             if details['secret'] and not unlocked:
                 embed.add_field(
@@ -3794,6 +3831,10 @@ async def steamsale(ctx):
 @bot.command(aliases=[ 'remind' ])
 async def reminder(ctx, reminder, *times):
 
+    if not ctx.guild:
+        await ctx.send("The `reminder` command cannot be executed from Direct Messages.")
+        return
+
     if reminder.lower() == 'cancel':
         timer_ID = times[0]
 
@@ -3859,6 +3900,7 @@ async def reminder(ctx, reminder, *times):
         ctx=ctx,
         achievement_ids=[
             'reminder_count_1',
+            'reminder_count_5',
             'reminder_count_10',
             'reminder_count_25',
             'reminder_count_50',
@@ -3877,47 +3919,78 @@ async def reminders(ctx):
         user_reminders = {k: v for k, v in reminders[str(ctx.author.id)].items()}
         if not user_reminders:
             raise Exception()
+        for k, v in user_reminders.items():
+            date_time = datetime.strptime(v['timer'],"%Y-%m-%d %H:%M:%S")
+            unix_timestamp = date_time.timestamp()
+            user_reminders[k]['unix_timestamp'] = int(unix_timestamp)
     except:
         await ctx.send("User has no reminders.")
         return
 
-    msg = '\n'.join( [f"`{ID}`: \"{data['reminder']}\" ({data['timer']})" for ID, data in user_reminders.items()] )
+    msg = '\n'.join( [f"`{ID}`: \"{data['reminder']}\" ({data['timer']}, roughly <t:{data['unix_timestamp']}:R>)" for ID, data in user_reminders.items()] )
 
     await ctx.send(content=msg)
 
-# production starts at 15% of cost for miner, incrementing by 2% each item
 crew_values = {
     'miner': {
-        'cost': 40,
-        'production': 3 # 15%
+        'abbreviation': 'mi',
+        'cost': 10,
+        'production': 1
     },
     'jackhammer': {
-        'cost': 120,
-        'production': 10 # 17%
+        'abbreviation': 'jh',
+        'cost': 110,
+        'production': 8
     },
     'drill': {
-        'cost': 400,
-        'production': 38 # 19%
+        'abbreviation': 'dr',
+        'cost': 1200,
+        'production': 48
     },
     'excavator': {
-        'cost': 1000,
-        'production': 105 # 21%
+        'abbreviation': 'ex',
+        'cost': 13000,
+        'production': 270
     },
     'jumbo drill': {
-        'cost': 4000,
-        'production': 460 # 23%
+        'abbreviation': 'jdr',
+        'cost': 140000,
+        'production': 1425
     },
     'jumbo excavator': {
-        'cost': 20000,
-        'production': 2500 # 25%
+        'abbreviation': 'jex',
+        'cost': 2000000,
+        'production': 8000
+    },
+    'mine': {
+        'abbreviation': 'mine',
+        'cost': 33000000,
+        'production': 45000
+    },
+    'mining village': {
+        'abbreviation': 'mv',
+        'cost': 450000000,
+        'production': 240000
+    },
+    'space mining crew': {
+        'abbreviation': 'smc',
+        'cost': 6000000000,
+        'production': 1300000
+    },
+    'interplanetary mining company': {
+        'abbreviation': 'ipmc',
+        'cost': 75000000000,
+        'production': 8000000
     }
 }
+
 
 with open('permanent_variables.json', 'r') as outfile:
     persistent_data = json.load(outfile)
 gems_value_multi = persistent_data['gems_multi']
 
 @bot.command()
+@commands.max_concurrency(number=1, per=commands.BucketType.user, wait=False)
 async def mine(ctx, *args):
 
     # Initiate user in file
@@ -3928,17 +4001,16 @@ async def mine(ctx, *args):
         mine_file[str(ctx.author.id)] = {
             'assets': {
                 'gems': 0,
-                'money': 40
+                'money': 10
             },
-            'crew': {
-                'miner': 0,
-                'jackhammer': 0,
-                'drill': 0,
-                'excavator': 0,
-                'jumbo drill': 0,
-                'jumbo excavator': 0
+            'crew': {},
+            'multi': {
+                'ascension': 1.0
             }
         }
+        for key in crew_values:
+            mine_file[str(ctx.author.id)]['crew'][key] = 0
+
         with open('mine.json', 'w') as f:
             json.dump(mine_file, f, indent=4)
 
@@ -3952,46 +4024,61 @@ async def mine(ctx, *args):
                 mine_data = json.load(outfile)
                 user_data = mine_data[str(ctx.author.id)]
 
-            embed = discord.Embed(title=f"{ctx.author.name}'s Mine Shop", description=f"Money: $ {user_data['assets']['money']}", color=bot_color)
+            embed = discord.Embed(title=f"{ctx.author.name}'s Mine Shop", description=f"Money: $ {user_data['assets']['money']:,.2f}", color=bot_color)
 
             for crew, crew_info in crew_values.items():
-                cost_mult = crew_info['cost']*user_data['crew'][crew]*0.35
-                cost = int(crew_info['cost']+cost_mult)
+
+                cost = crew_info['cost']*(1.2**(mine_data[str(ctx.author.id)]['crew'][crew]))
                 embed.add_field(
-                    name=crew.title(),
-                    value=f"Cost: $ {cost}\nproduction: {crew_info['production']} 💎/5min",
+                    name=f"{crew.title()} (`{crew_info['abbreviation']}`)",
+                    value=f"Cost: $ {cost:,.2f}\nproduction: {crew_info['production']:,} 💎/min",
                     inline=False
                 )
             
             await ctx.send(embed=embed)
+
             return
         
         elif arg.lower() == 'buy':
             try:
                 what = args[1].lower()
-                # count = int(arg[3])
             except:
                 await ctx.send(f"Error: Missing crew type argument.")
                 return
+        
+            try:
+                count = int(args[2])
+            except:
+                count = 1
             
             with open('mine.json', 'r') as outfile:
                 mine_data = json.load(outfile)
                 user_data = mine_data[str(ctx.author.id)]
 
-            cost_mult = crew_values[what]['cost']*user_data['crew'][what]*0.35
-            cost = int(crew_values[what]['cost']+cost_mult)
+            for crew, info in crew_values.items():
+                if what == info['abbreviation']:
+                    what = crew
+                    break
+                else:
+                    continue
+
+            user_crew_count = user_data['crew'][what]
+            crew_base_value = crew_values[what]['cost']
+            all_costs = [ crew_base_value * (1.2 ** ( user_crew_count + counted ) ) for counted in range(count)]
+
+            cost = sum(all_costs)
 
             if cost <= mine_data[str(ctx.author.id)]['assets']['money']:
                 mine_data[str(ctx.author.id)]['assets']['money'] -= cost
-                mine_data[str(ctx.author.id)]['crew'][what] += 1
-                new_cost_mult = crew_values[what]['cost']*user_data['crew'][what]*0.35
-                new_cost = int(crew_values[what]['cost']+new_cost_mult)
-                await ctx.send(f"Purchased `{what}` for `{cost}`. Unit price has increased to `$ {new_cost}`. Your funds are now `$ {mine_data[str(ctx.author.id)]['assets']['money']}`.")
+                mine_data[str(ctx.author.id)]['crew'][what] += count
+                new_cost = crew_values[what]['cost'] * ( 1.2 ** ( mine_data[str(ctx.author.id)]['crew'][what] ) )
+                await ctx.send(f"{ctx.author.name} hired {count} `{what}` for `{cost:,.2f}`. Unit price has increased to `$ {new_cost:,.2f}`. Your funds are now `$ {mine_data[str(ctx.author.id)]['assets']['money']:,.2f}`.")
                 with open('mine.json', 'w') as f:
                     json.dump(mine_data, f, indent=4)
-                statistics("Idle Mine crew purchased")
+                statistics("Idle Mine crew purchased", increase=count)
                 await achievement(
                     ctx=ctx,
+                    count=count,
                     achievement_ids=[
                         "mine_crew_hired_1",
                         "mine_crew_hired_5",
@@ -3999,11 +4086,15 @@ async def mine(ctx, *args):
                         "mine_crew_hired_25",
                         "mine_crew_hired_50",
                         "mine_crew_hired_100",
-                        "mine_crew_hired_250"
+                        "mine_crew_hired_250",
+                        "mine_crew_hired_500",
+                        "mine_crew_hired_1k",
+                        "mine_crew_hired_2k",
+                        "mine_crew_hired_5k"
                     ]
                 )
             else:
-                await ctx.send(f"You can't afford `{what}` for `$ {cost}`. Your funds: `$ {mine_data[str(ctx.author.id)]['assets']['money']}`")
+                await ctx.send(f"{ctx.author.name} cannot afford {count} `{what}` for `$ {cost:,.2f}`. Your funds: `$ {mine_data[str(ctx.author.id)]['assets']['money']:,.2f}`")
             
             return
         
@@ -4012,26 +4103,44 @@ async def mine(ctx, *args):
                 mine_data = json.load(outfile)
                 user_data = mine_data[str(ctx.author.id)]
             
-            gems = user_data['assets']['gems']
+            gems = int(user_data['assets']['gems'])
+            ascension = user_data['multi']['ascension']
+            
+            if len(args) > 1:
+                try:
+                    count_to_sell = int(args[1])
+                    if count_to_sell <= 0 or count_to_sell > gems:
+                        raise(Exception)
+                except:
+                    await ctx.send(f"{ctx.author.name}, error processing `sell` function with argument `{args[1]}` - must be a positive integer no higher than your current gems count.")
+                    return
+            else:
+                count_to_sell = gems
             
             if not gems:
                 await ctx.send("You have no 💎 gems to sell!")
                 return
             
-            earning = int(gems*gems_value_multi)
-
-            mine_data[str(ctx.author.id)]['assets']['gems'] = 0
-            mine_data[str(ctx.author.id)]['assets']['money'] += earning
+            earning = round(
+                ( count_to_sell * gems_value_multi ) * ascension,
+                2
+            )
+            
+            mine_data[str(ctx.author.id)]['assets']['gems'] -= count_to_sell
+            mine_data[str(ctx.author.id)]['assets']['money'] += round(earning, 2)
 
             with open('mine.json', 'w') as f:
                 json.dump(mine_data, f, indent=4)
-
-            await ctx.send(f"Sold `💎 {gems}` gems for `$ {earning}` at `$ {format(gems_value_multi, '.2f')}/💎 gem` market price!")
+            if user_data['multi']['ascension'] > 1.0:
+                ascension_bonus_text = f" (+`{round(ascension-1.0, 4):,}% ($ {round( earning - ( count_to_sell * gems_value_multi ), 2 ):,})` Ascension Bonus)"
+            else:
+                ascension_bonus_text = ''
+            await ctx.send(f"{ctx.author.name} sold `💎 {count_to_sell}` gems for `$ {earning:,.2f}` at `$ {gems_value_multi:,.2f}/💎 gem` market price{ascension_bonus_text}! Your funds are now `$ {mine_data[str(ctx.author.id)]['assets']['money']:,.2f}`.")
 
             statistics("Idle Mine money earned", earning)
             await achievement(
                 ctx=ctx,
-                count=gems,
+                count=count_to_sell,
                 achievement_ids=[
                     "mine_gems_mined_1",
                     "mine_gems_mined_100",
@@ -4044,7 +4153,8 @@ async def mine(ctx, *args):
                     "mine_gems_mined_1m",
                     "mine_gems_mined_10m",
                     "mine_gems_mined_100m",
-                    "mine_gems_mined_1b"
+                    "mine_gems_mined_1b",
+                    "mine_gems_mined_1t"
                 ]
             )
             await achievement(
@@ -4063,6 +4173,7 @@ async def mine(ctx, *args):
                     "mine_money_earned_10m",
                     "mine_money_earned_100m",
                     "mine_money_earned_1b",
+                    "mine_money_earned_1t"
                 ]
             )
 
@@ -4073,7 +4184,148 @@ async def mine(ctx, *args):
                 highlight = '+ '
             else:
                 highlight = '- '
-            await ctx.send(f"{'The market is good! Time to sell!' if highlight == '+ ' else 'The market is not great, better wait it out.'}\n```diff\n{highlight}💎1 = $ {format(gems_value_multi, '.2f')}\n```")
+            await ctx.send(f"{'The market is good! Time to sell!' if highlight == '+ ' else 'The market is not great, better wait it out.'}\n```diff\n{highlight}💎1 = $ {gems_value_multi:,.2f}\n```")
+
+            return
+        
+        elif arg.lower() == 'ascend':
+            ascension_divider = 10000
+
+            with open('mine.json', 'r') as outfile:
+                mine_data = json.load(outfile)
+
+            user_data = mine_data[str(ctx.author.id)]
+            
+            production = {}
+            for crew, crew_count in user_data['crew'].items():
+                production[crew] = (crew_count*crew_values[crew]['production'])
+            total_production = sum(production.values())
+
+            ascension_bonus = round(total_production/ascension_divider, 4)
+
+            await ctx.send(f"You've received a letter from the President herself.\n\n*\"The country is in a dire state! I must ask you to relinquish all of your mining operation and funds to government officials. Don't worry, you will be well rewarded for your contributions to the glory of [REDACTED]!\"*\n\nThis action will reset ALL your progress, including any achievement in progress (not yet unlocked).\nYou will gain `{ascension_bonus:,}%` bonus gems value (based on your current production rate of `{total_production:,} 💎/min`).\nAre you sure you want to continue?\n\nSay `Confirm` to confirm.")
+            def check(m):
+                return m.author == ctx.author and m.content.lower() == "confirm"
+
+            try:
+                await bot.wait_for("message", check=check, timeout=15.0)
+            except asyncio.TimeoutError:
+                await ctx.send("Command timed out. Operation cancelled.")
+                return
+            
+            mine_data[str(ctx.author.id)] = {
+                'assets': {
+                    'gems': 0,
+                    'money': 10
+                },
+                'crew': {},
+                'multi': {
+                    'ascension': 1.0
+                }
+            }
+            for key in crew_values:
+                mine_data[str(ctx.author.id)]['crew'][key] = 0
+
+            mine_data[str(ctx.author.id)]['multi']['ascension'] = 1.0+ascension_bonus
+
+            with open('mine.json', 'w') as f:
+                json.dump(mine_data, f, indent=4)
+
+            await ctx.send(f"""
+No sooner have you signed the relevant paperworks and submitted them to your glorious government, that a new letter arrives.
+
+*\"Your dedication to serve your country are noted, and appreciated.\"*
+*\"Kindly find attached the deeds to new lands waiting to be mined, $10.00 in cash, and our friends at the stock exchange will ensure you receive a bonus of {ascension_bonus:,}% on all sales of gems moving forward.\"*
+
+*Best regards,*
+*Madam Ruby Gemina*
+*Glorious President of [REDACTED]*
+
+You stand before the barren lands that have been bestowed upon you, clenching $10 in your fist. You can't help but ask yourself... *Was it worth it*?
+But there is not time ponder. No time to lose. It's time to start over. To get to work. For the glory of capitalism. For the glory of [REDACTED].
+            """)
+
+            if int(ascension_bonus) >= 1.0:
+                await achievement(
+                    ctx=ctx,
+                    count=int(ascension_bonus),
+                    wipe=True,
+                    reset=True,
+                    achievement_ids=[
+                        "mine_ascension_1",
+                        "mine_ascension_5",
+                        "mine_ascension_10",
+                        "mine_ascension_25",
+                        "mine_ascension_50",
+                        "mine_ascension_100",
+                        "mine_ascension_500",
+                        "mine_ascension_1k",
+                        "mine_ascension_5k",
+                        "mine_ascension_10k",
+                        "mine_ascension_25k",
+                        "mine_ascension_100k",
+                        "mine_ascension_500k"
+                    ]
+                )
+            
+            await achievement(
+                ctx=ctx,
+                count=0,
+                wipe=True,
+                achievement_ids=[
+                    "mine_gems_mined_1",
+                    "mine_gems_mined_100",
+                    "mine_gems_mined_500",
+                    "mine_gems_mined_2k",
+                    "mine_gems_mined_5k",
+                    "mine_gems_mined_20k",
+                    "mine_gems_mined_100k",
+                    "mine_gems_mined_500k",
+                    "mine_gems_mined_1m",
+                    "mine_gems_mined_10m",
+                    "mine_gems_mined_100m",
+                    "mine_gems_mined_1b",
+                    "mine_gems_mined_1t"
+                ]
+            )
+            await achievement(
+                ctx=ctx,
+                count=0,
+                wipe=True,
+                achievement_ids=[
+                    "mine_money_earned_20",
+                    "mine_money_earned_100",
+                    "mine_money_earned_500",
+                    "mine_money_earned_2k",
+                    "mine_money_earned_5k",
+                    "mine_money_earned_20k",
+                    "mine_money_earned_100k",
+                    "mine_money_earned_500k",
+                    "mine_money_earned_1m",
+                    "mine_money_earned_10m",
+                    "mine_money_earned_100m",
+                    "mine_money_earned_1b",
+                    "mine_money_earned_1t"
+                ]
+            )
+            await achievement(
+                ctx=ctx,
+                count=0,
+                wipe=True,
+                achievement_ids=[
+                    "mine_crew_hired_1",
+                    "mine_crew_hired_5",
+                    "mine_crew_hired_10",
+                    "mine_crew_hired_25",
+                    "mine_crew_hired_50",
+                    "mine_crew_hired_100",
+                    "mine_crew_hired_250",
+                    "mine_crew_hired_500",
+                    "mine_crew_hired_1k",
+                    "mine_crew_hired_2k",
+                    "mine_crew_hired_5k"
+                ]
+            )
 
             return
 
@@ -4088,37 +4340,51 @@ async def mine(ctx, *args):
     
     embed = discord.Embed(title=f"{ctx.author.name}'s Mine", color=bot_color)
 
-    earnings = {}
+    gems_earnings = {}
     for crew, crew_count in user_data['crew'].items():
-        earnings[crew] = (crew_count*crew_values[crew]['production'])
-    earnings_sum = sum(earnings.values())
+        gems_earnings[crew] = (crew_count*crew_values[crew]['production'])
+    gems_earnings_total = round( sum( gems_earnings.values() ) )
     embed.add_field(
             name="Gems",
-            value=f"💎 {user_data['assets']['gems']} (+{earnings_sum}/5min)",
+            value=f"💎 {user_data['assets']['gems']:,} (+{gems_earnings_total:,}/min)",
             inline=False
         )
     
     embed.add_field(
             name="Money",
-            value=f"$ {user_data['assets']['money']}",
+            value=f"$ {user_data['assets']['money']:,.2f}",
+            inline=False
+        )
+    
+    embed.add_field(
+        name="Ascension Bonus",
+        value=f"{round(user_data['multi']['ascension']-1.0, 4)}% money earned on gems sales"
+    )
+    
+    embed.add_field(
+            name="",
+            value="",
             inline=False
         )
     
     for crew, count in user_data['crew'].items():
         embed.add_field(
-            name=f"{crew.title()} (+{crew_values[crew]['production']} 💎/5min)",
-            value=f"{count} (+{earnings[crew]} 💎/5min)",
+            name=f"{crew.title()} (+{crew_values[crew]['production']:,} 💎/min)",
+            value=f"{count:,} (+{gems_earnings[crew]:,} 💎/min)",
             inline=False
         )
     
     await ctx.send(embed=embed)
+
+    with open('mine.json', 'w') as f:
+        json.dump(mine_data, f, indent=4)
 
 @bot.command()
 async def mineguide(ctx):
     embed = discord.Embed(title="Idle Mine Guide", description="`mine` command guide", color=bot_color)
     embed.add_field(
         name="Introduction",
-        value="Well hello there, pioneer of the gemstones mining industry! You've just received your documents authorizing mining activity on your plot of land, you have $40 in allocated funds, and your heart burns with a fire only a [REDACTED] citizen can have! Let's get down to business - our great nation has just gotten out of yet another conflict with the neighbours across the border, and the coffers are empty. The nation of [REDACTED] needs money, and under our feet are billions of dollars' worth of gems, waiting to be plucked out. So let's get to work, eh?",
+        value="Well hello there, pioneer of the gemstones mining industry! You've just received your documents authorizing mining activity on your plot of land, you have $10 in allocated funds, and your heart burns with a fire only a [REDACTED] citizen can have! Let's get down to business - our great nation has just gotten out of yet another conflict with the neighbours across the border, and the coffers are empty. The nation of [REDACTED] needs money, and under our feet are billions of dollars' worth of gems, waiting to be plucked out. So let's get to work, eh?",
         inline=False
     )
     embed.add_field(
@@ -4130,34 +4396,41 @@ async def mineguide(ctx):
         name="Command Arguments",
         value=f"""- `shop` - View the shop to buy crew.
 - `buy` `crew` - Exchange money for the specified `crew` (see `shop` for details). Example: `buy "jumbo drill"`
-- `sell` - Sell your gems for money at current market price (see `market` for market price before selling)
+- `sell` `amount` - Sell your gems for money at current market price (see `market` for market price before selling). Takes an optional `amount` argument, else sells all supplies.
 - `market` - Displays the current `gem -> money` exchange rate.
+- `ascend` - Wipes all progress to gain an Ascension Bonus which multiplies the money earned when selling gems.
         """,
         inline=False
     )
     embed.add_field(
         name="Market",
-        value="The gems market can be profitable, but also treacherous! In an ever-volatile world, dealing in gemstones can be a fickle matter. Keep an eye on the `market` pricing, and potentially reconsider selling your gems during moments of low exchange rates to maximize profit. The market pricing of gems will occasionally change an average of 3-4 times a day and the lovely people at our government-approved news outlet will give us a heads up when it happens, but the exact timing is a mystery. Stay on your toes, and move fast!",
+        value="The gems market can be profitable, but also treacherous! In an ever-volatile world, dealing in gemstones can be a fickle matter. Keep an eye on the `market` pricing, and potentially reconsider selling your gems during moments of high exchange rates to maximize profit. The market pricing of gems will occasionally change over the course of the day and the lovely people at our government-approved news outlet will give us a heads up when it happens, but the exact timing is a mystery. Stay on your toes, and move fast!",
         inline=False
     )
 
     await ctx.send(embed=embed)
 
-@tasks.loop(minutes=5)
+mine_live_message_id = None
+
+@tasks.loop(seconds=60)
 async def mine_process():
 
     global gems_value_multi
+    global mine_live_message_id
 
-    if random.random() < 0.03: # (24 * 60 / 5) * 0.03 = 8.64 average triggers per 24h at 5m intervals
+    with open('permanent_variables.json', 'r') as outfile:
+        persistent_data = json.load(outfile)
+
+    if random.random() < 0.011: # (24 * 60) * 0.011 = 15.84 average triggers per 24h at 1m intervals
         gems_value_multi_to_apply = random.randint(-25, 25)/100.0
+        if gems_value_multi_to_apply == 1.0:
+            gems_value_multi_to_apply = 0.99
         gems_value_multi = round(1.0+gems_value_multi_to_apply, 2)
 
-        with open('permanent_variables.json', 'r') as outfile:
-            persistent_data = json.load(outfile)
         persistent_data['gems_multi'] = gems_value_multi
 
         with open('permanent_variables.json', 'w') as f:
-            json.dump(persistent_data, f)
+            json.dump(persistent_data, f, indent=4)
 
         if gems_value_multi > 1.0:
             highlight = '+ '
@@ -4192,7 +4465,7 @@ async def mine_process():
                 "Stormy season is causing disruptions in shipping of commodities. Traders are halting all trading until further notice.",
                 "A typographical error at the stock exchange caused a panic. Traders are liquidating their stocks in gems.",
                 "Breaking news in the fashion industry - Gemstones are SO uncool. The chic crowd is ditching them.",
-                "Hugely popular TV talk show host Gemina Safire just had a segment encouraging women to stay single. Engagement rings refunds are on the rise.",
+                "Hugely popular TV talk show host Jemma Safire just had a segment encouraging women to stay single. Engagement rings refunds are on the rise.",
                 "A breakthrough in lab-grown gem technology floods the market with affordable alternatives, decreasing demand for natural gemstones.",
                 "Rumors spread about the environmental impact of gemstone mining, leading to a decline in consumer interest and demand.",
                 "An economic recession forces consumers to cut back on luxury purchases, including gemstones, reducing overall market demand.",
@@ -4207,22 +4480,68 @@ async def mine_process():
 
         message = random.choice(random_messages)
 
-        cha = bot.get_channel(bot_channel)
-        await cha.send(f"GEMS MARKET UPDATE: {message}\n```diff\n{highlight}💎1 = $ {format(gems_value_multi, '.2f')}\n```")
+        try:
+            cha = bot.get_channel(miners_channel)
+            await cha.send(f"<@{role_miners}> GEMS MARKET UPDATE: {message}\n```diff\n{highlight}💎1 = $ {gems_value_multi:.2f}\n```")
+        except:
+            pass
 
     with open('mine.json', 'r') as outfile:
         mine_data = json.load(outfile)
 
+    if not mine_data:
+        return
+
+    # mine_live_message embed
+    embed = discord.Embed(title=f"Mine Live Feed", color=bot_color)
+
+    # try:
     for userID, data in mine_data.items():
         earnings = []
         for crew, crew_count in data['crew'].items():
             earnings.append(crew_count*crew_values[crew]['production'])
     
-        earnings = sum(earnings)
+        earnings = round( sum(earnings) )
 
         mine_data[str(userID)]['assets']['gems'] += earnings
+        
+        user = bot.get_user(int(userID))
+        embed.add_field(
+            name=user.name,
+            value=f"💎 {human_num(mine_data[str(userID)]['assets']['gems'])} (+{human_num(earnings)}/min)",
+            inline=False
+        )
 
         statistics("Idle Mine gems mined", earnings)
+    
+    cha = bot.get_channel(miners_channel)
+
+    if not mine_live_message_id:
+        msg = await cha.send(embed=embed)
+        await msg.pin()
+        mine_live_message_id = msg.id
+    
+    else:
+        msg = await cha.fetch_message(int(mine_live_message_id))
+        await msg.edit(embed=embed)
+        persistent_data['mine_live_message_edit_count'] += 1
+    
+    if persistent_data['mine_live_message_edit_count'] > 60:
+        old_msg = await cha.fetch_message(int(mine_live_message_id))
+        await old_msg.unpin()
+        await old_msg.delete()
+        persistent_data['mine_live_message_edit_count'] = 0
+        mine_live_message_id = None
+
+        msg = await cha.send(embed=embed)
+        await msg.pin()
+        mine_live_message_id = msg.id
+    
+    with open('permanent_variables.json', 'w') as f:
+        json.dump(persistent_data, f, indent=4)
+
+    # except:
+    #     pass
 
     with open('mine.json', 'w') as f:
         json.dump(mine_data, f, indent=4)
@@ -4344,7 +4663,7 @@ async def help(ctx, query=None):
          "Checks the current ongoing Steam sale/event, and what and when the next sale/event will occur."),
 
         ("reminder (aliases: `remind`) `\"reminder\"` `1d` `1h` `1m`",
-         "Sets a reminder for the user. Reminder must be in quotes, followed by day(s), hour(s), and minute(s) in the format Xd Xh Xm where X are integers. All are optional, but at least one value must be provided."),
+         "Sets a reminder for the user. Reminder must be in quotes, followed by day(s), hour(s), and minute(s) in the format Xd Xh Xm where X are integers. All are optional, but at least one value must be provided. Also see `reminders` command."),
 
         ("reminder `cancel` `reminder_ID`",
          "Cancels reminder with ID `reminder_ID`."),
@@ -4451,7 +4770,7 @@ async def updatethread(ctx, thread, link):
     if thread in steamgifts_threads:
         permanent_variables['thread_links'][thread] = link
         with open("permanent_variables.json", "w") as f:
-            json.dump(permanent_variables, f)
+            json.dump(permanent_variables, f, indent=4)
 
         await ctx.send(f"Thread `{thread}` set to `{link}`.")
 
@@ -4590,7 +4909,7 @@ async def dailynotif(ctx, *reminder):
         await ctx.send(f"Set daily reminder:\n`{reminder}`")
     
     with open('permanent_variables.json', 'w') as f:
-        json.dump(persistent_data, f)
+        json.dump(persistent_data, f, indent=4)
 
 # TASKS
 
@@ -4653,7 +4972,7 @@ async def check_for_new_giveaways():
         last_checked_active_ga_ids = last_checked_active_ga_ids[-100:]
         permanent_variables['last_checked_active_ga_ids'] = last_checked_active_ga_ids
         with open("permanent_variables.json", "w") as f:
-            json.dump(permanent_variables, f)
+            json.dump(permanent_variables, f, indent=4)
     
     else:
         print("ABORT: No new giveaways detected.")
@@ -4707,8 +5026,8 @@ async def daily_notifier():
 
 # Frequent loop
 
-@tasks.loop(minutes=1)
-async def reminders():
+@tasks.loop(seconds=60)
+async def reminders_process():
     with open('reminders.json', 'r') as outfile:
         reminders_data = json.load(outfile)
 
