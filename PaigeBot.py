@@ -4482,7 +4482,7 @@ async def mine_process():
 
         try:
             cha = bot.get_channel(miners_channel)
-            await cha.send(f"<@{role_miners}> GEMS MARKET UPDATE: {message}\n```diff\n{highlight}💎1 = $ {gems_value_multi:.2f}\n```")
+            await cha.send(f"<@&{role_miners}> GEMS MARKET UPDATE: {message}\n```diff\n{highlight}💎1 = $ {gems_value_multi:.2f}\n```")
         except:
             pass
 
