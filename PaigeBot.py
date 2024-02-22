@@ -732,11 +732,11 @@ async def on_ready():
 
     try:
         if not bot.user.id == 823385752486412290:
-            await daily_tasks.start()
-            await check_for_new_giveaways.start()
-            await daily_notifier.start()
-            await reminders_process.start()
-            await mine_process.start()
+            daily_tasks.start()
+            check_for_new_giveaways.start()
+            daily_notifier.start()
+            reminders_process.start()
+            mine_process.start()
     except:
         pass
 
@@ -745,11 +745,11 @@ async def on_connect():
     print(f"Bot has connected to Discord.")
     try:
         if not bot.user.id == 823385752486412290:
-            await daily_tasks.start()
-            await check_for_new_giveaways.start()
-            await daily_notifier.start()
-            await reminders_process.start()
-            await mine_process.start()
+            daily_tasks.start()
+            check_for_new_giveaways.start()
+            daily_notifier.start()
+            reminders_process.start()
+            mine_process.start()
     except:
         pass
 
