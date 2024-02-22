@@ -4495,53 +4495,53 @@ async def mine_process():
     # mine_live_message embed
     embed = discord.Embed(title=f"Mine Live Feed", color=bot_color)
 
-    # try:
-    for userID, data in mine_data.items():
-        earnings = []
-        for crew, crew_count in data['crew'].items():
-            earnings.append(crew_count*crew_values[crew]['production'])
-    
-        earnings = round( sum(earnings) )
-
-        mine_data[str(userID)]['assets']['gems'] += earnings
+    try:
+        for userID, data in mine_data.items():
+            earnings = []
+            for crew, crew_count in data['crew'].items():
+                earnings.append(crew_count*crew_values[crew]['production'])
         
-        user = bot.get_user(int(userID))
-        embed.add_field(
-            name=user.name,
-            value=f"💎 {human_num(mine_data[str(userID)]['assets']['gems'])} (+{human_num(earnings)}/min)",
-            inline=False
-        )
+            earnings = round( sum(earnings) )
 
-        statistics("Idle Mine gems mined", earnings)
-    
-    cha = bot.get_channel(miners_channel)
+            mine_data[str(userID)]['assets']['gems'] += earnings
+            
+            user = bot.get_user(int(userID))
+            embed.add_field(
+                name=user.name,
+                value=f"💎 {human_num(mine_data[str(userID)]['assets']['gems'])} (+{human_num(earnings)}/min)",
+                inline=False
+            )
 
-    if not mine_live_message_id:
-        msg = await cha.send(embed=embed)
-        await msg.pin()
-        mine_live_message_id = msg.id
-    
-    else:
-        msg = await cha.fetch_message(int(mine_live_message_id))
-        await msg.edit(embed=embed)
-        persistent_data['mine_live_message_edit_count'] += 1
-    
-    if persistent_data['mine_live_message_edit_count'] > 60:
-        old_msg = await cha.fetch_message(int(mine_live_message_id))
-        await old_msg.unpin()
-        await old_msg.delete()
-        persistent_data['mine_live_message_edit_count'] = 0
-        mine_live_message_id = None
+            statistics("Idle Mine gems mined", earnings)
+        
+        cha = bot.get_channel(miners_channel)
 
-        msg = await cha.send(embed=embed)
-        await msg.pin()
-        mine_live_message_id = msg.id
-    
-    with open('permanent_variables.json', 'w') as f:
-        json.dump(persistent_data, f, indent=4)
+        if not mine_live_message_id:
+            msg = await cha.send(embed=embed)
+            await msg.pin()
+            mine_live_message_id = msg.id
+        
+        else:
+            msg = await cha.fetch_message(int(mine_live_message_id))
+            await msg.edit(embed=embed)
+            persistent_data['mine_live_message_edit_count'] += 1
+        
+        if persistent_data['mine_live_message_edit_count'] > 60:
+            old_msg = await cha.fetch_message(int(mine_live_message_id))
+            await old_msg.unpin()
+            await old_msg.delete()
+            persistent_data['mine_live_message_edit_count'] = 0
+            mine_live_message_id = None
 
-    # except:
-    #     pass
+            msg = await cha.send(embed=embed)
+            await msg.pin()
+            mine_live_message_id = msg.id
+        
+        with open('permanent_variables.json', 'w') as f:
+            json.dump(persistent_data, f, indent=4)
+
+    except:
+        pass
 
     with open('mine.json', 'w') as f:
         json.dump(mine_data, f, indent=4)
