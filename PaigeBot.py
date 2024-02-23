@@ -3586,6 +3586,10 @@ async def achievements(ctx, *args):
             progress = ''
             if details['goal'] > 1:
                 if user_achievements.get(ach):
+                    if isinstance(user_achievements[ach]['counter'], int):
+                        counter = f"{user_achievements[ach]['counter']:,}"
+                    else:
+                        counter = f"{user_achievements[ach]['counter']:,.2}"
                     progress = f"({user_achievements[ach]['counter']:,}/{details['goal']:,})"
                 else:
                     progress = f"(0/{details['goal']:,})"
@@ -4137,7 +4141,7 @@ async def mine(ctx, *args):
                 ascension_bonus_text = ''
             await ctx.send(f"{ctx.author.name} sold `💎 {count_to_sell}` gems for `$ {earning:,.2f}` at `$ {gems_value_multi:,.2f}/💎 gem` market price{ascension_bonus_text}! Your funds are now `$ {mine_data[str(ctx.author.id)]['assets']['money']:,.2f}`.")
 
-            statistics("Idle Mine money earned", earning)
+            statistics("Idle Mine money earned", round(earning, 2))
             await achievement(
                 ctx=ctx,
                 count=count_to_sell,
