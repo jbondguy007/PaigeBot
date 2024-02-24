@@ -3586,11 +3586,7 @@ async def achievements(ctx, *args):
             progress = ''
             if details['goal'] > 1:
                 if user_achievements.get(ach):
-                    if isinstance(user_achievements[ach]['counter'], int):
-                        counter = f"{user_achievements[ach]['counter']:,}"
-                    else:
-                        counter = f"{user_achievements[ach]['counter']:,.2}"
-                    progress = f"({counter}/{details['goal']:,})"
+                    progress = f"({int(user_achievements[ach]['counter']):,}/{details['goal']:,})"
                 else:
                     progress = f"(0/{details['goal']:,})"
             
