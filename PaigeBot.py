@@ -3590,7 +3590,7 @@ async def achievements(ctx, *args):
                         counter = f"{user_achievements[ach]['counter']:,}"
                     else:
                         counter = f"{user_achievements[ach]['counter']:,.2}"
-                    progress = f"({user_achievements[ach]['counter']:,}/{details['goal']:,})"
+                    progress = f"({counter}/{details['goal']:,})"
                 else:
                     progress = f"(0/{details['goal']:,})"
             
