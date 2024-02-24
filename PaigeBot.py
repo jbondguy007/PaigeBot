@@ -4005,7 +4005,7 @@ async def mine(ctx, *args):
             },
             'crew': {},
             'multi': {
-                'ascension': 1.0
+                'ascension': 0.0
             }
         }
         for key in crew_values:
@@ -4122,7 +4122,7 @@ async def mine(ctx, *args):
                 return
             
             earning = round(
-                ( count_to_sell * gems_value_multi ) * ascension,
+                ( count_to_sell * gems_value_multi ) * (1.0+(ascension/100.0)),
                 2
             )
             
@@ -4131,11 +4131,11 @@ async def mine(ctx, *args):
 
             with open('mine.json', 'w') as f:
                 json.dump(mine_data, f, indent=4)
-            if user_data['multi']['ascension'] > 1.0:
-                ascension_bonus_text = f" (+`{round(ascension-1.0, 4):,}% ($ {round( earning - ( count_to_sell * gems_value_multi ), 2 ):,})` Ascension Bonus)"
+            if user_data['multi']['ascension'] > 0.0:
+                ascension_bonus_text = f" (including +`{round(ascension, 4):,}% ($ {round( earning - ( count_to_sell * gems_value_multi ), 2 ):,})` Ascension Bonus)"
             else:
                 ascension_bonus_text = ''
-            await ctx.send(f"{ctx.author.name} sold `💎 {count_to_sell}` gems for `$ {earning:,.2f}` at `$ {gems_value_multi:,.2f}/💎 gem` market price{ascension_bonus_text}! Your funds are now `$ {mine_data[str(ctx.author.id)]['assets']['money']:,.2f}`.")
+            await ctx.send(f"{ctx.author.name} sold `💎 {count_to_sell}` gems for a total of `$ {earning:,.2f}` at `$ {gems_value_multi:,.2f}/💎 gem` market price{ascension_bonus_text}! Your funds are now `$ {mine_data[str(ctx.author.id)]['assets']['money']:,.2f}`.")
 
             statistics("Idle Mine money earned", round(earning, 2))
             await achievement(
@@ -4202,7 +4202,7 @@ async def mine(ctx, *args):
             total_production = sum(production.values())
 
             ascension_bonus = round(total_production/ascension_divider, 4)
-            current_ascension_bonus = round(mine_data[str(ctx.author.id)]['multi']['ascension']-1.0, 4)
+            current_ascension_bonus = round(mine_data[str(ctx.author.id)]['multi']['ascension'], 4)
 
             if current_ascension_bonus >= ascension_bonus:
                 await ctx.send(f"Your current Ascension Bonus (`{current_ascension_bonus:,}%`) is already greater than the Ascension Bonus you would receive if you ascended now (`{ascension_bonus:,}%`). Try ascending later!")
@@ -4228,13 +4228,13 @@ async def mine(ctx, *args):
                 },
                 'crew': {},
                 'multi': {
-                    'ascension': 1.0
+                    'ascension': 0.0
                 }
             }
             for key in crew_values:
                 mine_data[str(ctx.author.id)]['crew'][key] = 0
 
-            mine_data[str(ctx.author.id)]['multi']['ascension'] = 1.0+ascension_bonus
+            mine_data[str(ctx.author.id)]['multi']['ascension'] = ascension_bonus
 
             with open('mine.json', 'w') as f:
                 json.dump(mine_data, f, indent=4)
@@ -4253,7 +4253,7 @@ You stand before the barren lands that have been bestowed upon you, clenching $1
 But there is not time ponder. No time to lose. It's time to start over. To get to work. For the glory of capitalism. For the glory of [REDACTED].
             """)
 
-            if int(ascension_bonus) >= 1.0:
+            if int(ascension_bonus) > 0:
                 await achievement(
                     ctx=ctx,
                     count=int(ascension_bonus),
@@ -4366,7 +4366,7 @@ But there is not time ponder. No time to lose. It's time to start over. To get t
     
     embed.add_field(
         name="Ascension Bonus",
-        value=f"{round(user_data['multi']['ascension']-1.0, 4)}% money earned on gems sales"
+        value=f"{round(user_data['multi']['ascension'], 4)}% money earned on gems sales"
     )
     
     embed.add_field(
@@ -4406,7 +4406,7 @@ async def mineguide(ctx):
 - `buy` `crew` - Exchange money for the specified `crew` (see `shop` for details). Example: `buy "jumbo drill"`
 - `sell` `amount` - Sell your gems for money at current market price (see `market` for market price before selling). Takes an optional `amount` argument, else sells all supplies.
 - `market` - Displays the current `gem -> money` exchange rate.
-- `ascend` - Wipes all progress to gain an Ascension Bonus which multiplies the money earned when selling gems.
+- `ascend` - Wipes all progress to gain an Ascension Bonus which multiplies the money earned when selling gems. Displays information and prompts for a confirmation before proceeding.
         """,
         inline=False
     )
