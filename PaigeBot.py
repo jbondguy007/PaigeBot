@@ -4206,8 +4206,16 @@ async def mine(ctx, *args):
             total_production = sum(production.values())
 
             ascension_bonus = round(total_production/ascension_divider, 4)
+            current_ascension_bonus = round(mine_data[str(ctx.author.id)]['multi']['ascension']-1.0, 4)
 
-            await ctx.send(f"You've received a letter from the President herself.\n\n*\"The country is in a dire state! I must ask you to relinquish all of your mining operation and funds to government officials. Don't worry, you will be well rewarded for your contributions to the glory of [REDACTED]!\"*\n\nThis action will reset ALL your progress, including any achievement in progress (not yet unlocked).\nYou will gain `{ascension_bonus:,}%` bonus gems value (based on your current production rate of `{total_production:,} 💎/min`).\nAre you sure you want to continue?\n\nSay `Confirm` to confirm.")
+            if current_ascension_bonus >= ascension_bonus:
+                await ctx.send(f"Your current Ascension Bonus (`{current_ascension_bonus:,}%`) is already greater than the Ascension Bonus you would receive if you ascended now (`{ascension_bonus:,}%`). Try ascending later!")
+                return
+            else:
+                pass
+
+            await ctx.send(f"You've received a letter from the President herself.\n\n*\"The country is in a dire state! I must ask you to relinquish all of your mining operation and funds to government officials. Don't worry, you will be well rewarded for your contributions to the glory of [REDACTED]!\"*\n\nThis action will reset ALL your progress, including any achievement in progress (not yet unlocked).\nYou will get a `{ascension_bonus:,}%` bonus gems sales value (based on your current production rate of `{total_production:,} 💎/min`). {f'This will overwrite your current Ascension Bonus of `{current_ascension_bonus:,}%`.' if current_ascension_bonus > 0.0 else ''}\nAre you sure you want to continue?\n\nSay `Confirm` to confirm.")
+
             def check(m):
                 return m.author == ctx.author and m.content.lower() == "confirm"
 
