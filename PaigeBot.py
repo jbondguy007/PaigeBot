@@ -90,8 +90,10 @@ chosen_font = "DejaVuSans.ttf"
 
 with open("permanent_variables.json", "r") as f:
     permanent_variables = json.load(f)
+with open("last_checked_active_giveaways.json", "r") as f:
+    last_checked_active_giveaways = json.load(f)
 steamgifts_threads = permanent_variables['thread_links']
-last_checked_active_ga_ids = permanent_variables['last_checked_active_ga_ids']
+last_checked_active_ga_ids = last_checked_active_giveaways['last_checked_active_ga_ids']
 
 # CONFIG
 bot = commands.Bot(command_prefix=prefixes, help_command=None, intents=discord.Intents.all())
@@ -161,6 +163,7 @@ def upload_backups():
         'slots_prizes.json',
         'slots_blacklist.json',
         'bug_reports.json',
+        'last_checked_active_giveaways.json'
         'achievements.json',
         'achievements_usersdata.json',
         'statistics.json',
@@ -5266,9 +5269,9 @@ async def check_for_new_giveaways():
 
     print(f"CHECK: check_for_new_giveaways() triggered...")
 
-    with open("permanent_variables.json", "r") as f:
-        permanent_variables = json.load(f)
-    last_checked_active_ga_ids = permanent_variables['last_checked_active_ga_ids']
+    with open("last_checked_active_giveaways.json", "r") as f:
+        last_checked_active_giveaways = json.load(f)
+    last_checked_active_ga_ids = last_checked_active_giveaways['last_checked_active_ga_ids']
     giveaways = fetch_active_giveaways()['ongoing']
     new_giveaways_list = []
     # channel = bot.get_channel(630835643953709066)
@@ -5314,10 +5317,10 @@ async def check_for_new_giveaways():
             await channel.send(embed=embed)
 
         # Update last_checked_active_ga_ids
-        last_checked_active_ga_ids = last_checked_active_ga_ids[-100:]
-        permanent_variables['last_checked_active_ga_ids'] = last_checked_active_ga_ids
-        with open("permanent_variables.json", "w") as f:
-            json.dump(permanent_variables, f, indent=4)
+        last_checked_active_ga_ids = last_checked_active_ga_ids[-200:]
+        last_checked_active_giveaways['last_checked_active_ga_ids'] = last_checked_active_ga_ids
+        with open("last_checked_active_giveaways.json", "w") as f:
+            json.dump(last_checked_active_giveaways, f, indent=4)
     
     else:
         print("ABORT: No new giveaways detected.")
