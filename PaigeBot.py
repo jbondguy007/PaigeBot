@@ -31,6 +31,7 @@ from re import sub
 from decimal import Decimal
 from howlongtobeatpy import HowLongToBeat
 from math import floor
+from typing import Literal, Tuple, Optional
 
 # BOT INFO
 
@@ -3967,8 +3968,8 @@ crew_values = {
         'cost': 33000000,
         'production': 45000
     },
-    'mining village': {
-        'abbreviation': 'mv',
+    'mining town': {
+        'abbreviation': 'mt',
         'cost': 450000000,
         'production': 240000
     },
@@ -3996,6 +3997,7 @@ async def mine(ctx, *args):
     # Initiate user in file
     with open('mine.json', 'r') as outfile:
         mine_file = json.load(outfile)
+
     if str(ctx.author.id) not in mine_file:
 
         mine_file[str(ctx.author.id)] = {
@@ -4006,6 +4008,11 @@ async def mine(ctx, *args):
             'crew': {},
             'multi': {
                 'ascension': 0.0
+            },
+            'global stats': {
+                "gems mined": 0,
+                "money earned": 0,
+                "units bought": 0
             }
         }
         for key in crew_values:
@@ -4043,11 +4050,13 @@ async def mine(ctx, *args):
             try:
                 what = args[1].lower()
             except:
-                await ctx.send(f"Error: Missing crew type argument.")
+                await ctx.send(f"Error: Missing unit type argument.")
                 return
         
             try:
-                count = int(args[2])
+                count = args[2]
+                if not count.lower() == 'max':
+                    count = int(count)
             except:
                 count = 1
             
@@ -4062,20 +4071,82 @@ async def mine(ctx, *args):
                 else:
                     continue
 
+            user_money = user_data['assets']['money']
             user_crew_count = user_data['crew'][what]
             crew_base_value = crew_values[what]['cost']
+
+            if count == "max":
+
+                total_cost = 0
+                counter = 0
+
+                while total_cost <= user_money:
+                    counter += 1
+                    total_cost = sum(crew_base_value * (1.2 ** (user_crew_count + counted)) for counted in range(counter))
+
+                counter -= 1
+
+                if counter < 1:
+                    counter = 1
+
+                count = counter
+
             all_costs = [ crew_base_value * (1.2 ** ( user_crew_count + counted ) ) for counted in range(count)]
 
             cost = sum(all_costs)
 
-            if cost <= mine_data[str(ctx.author.id)]['assets']['money']:
+            if cost <= user_money:
+
+                units_intro = {
+                    'miner': {
+                        'title': "Humble Beginnings",
+                        'description': "As you hire your first miner, you are filled with determination. So it begins..."
+                    },
+                    'jumbo drill': {
+                        'title': "Industrialization",
+                        'description': "As time passes, your mining operation grows faster than expected. You're experiencing rapid growth, the cash flow is good, and your expanding your business quickly."
+                    },
+                    'mine': {
+                        'title': "Conglomerate",
+                        'description': "The final documents have been signed - you just purchased an entire mining operation alongside your own. Things are about to get big, fast."
+                    },
+                    'mining town': {
+                        'title': "Moving Up in the World",
+                        'description': "You think back to when you started, with a single miner. Who'd have thought you'd be the proud owner of an entire town one day?\n\nAnd yet, you can't help but feel like this is just the beginning..."
+                    },
+                    'space mining crew': {
+                        'title': "The Sky's Not the Limit",
+                        'description': "This is it. After years of research and development, you've finally done it.\nYou've established a Space Mining Crew (SMC) division, to seek out resources... in space.\n\nYou are conquering the final frontier."
+                    },
+                    'interplanetary mining company': {
+                        'title': "Planet Breacher",
+                        'description': "You stand up from your lavish desk and walk up to the gigantic window of your top-floor office, revealing the gritty, yet satisfying view of your empire. After conquring the edges of space, you pursued riches within the rest of the solar system.\n\nIs this it? Have you reached the edge of the explorable universe? You shrug away the thought, and help yourself to an exorbitantly expensive whiskey from your spirits cabinet.\n\nThere's still work to do, you think to yourself, as you enjoy the burning sensation of a well-deserved treat run down your throat."
+                    }
+                }
+
+                try:
+                    if mine_data[str(ctx.author.id)]['crew'][what] == 0:
+                        unit = units_intro[what]
+                        file = discord.File(f"idlemine/images/units/{what.replace(' ', '_')}.png")
+                        embed = discord.Embed(title=unit['title'], description=unit['description'])
+                        embed.set_image(url=f"attachment://{what.replace(' ', '_')}.png")
+                        await ctx.send(embed=embed, file=file)
+                except:
+                    pass
+
                 mine_data[str(ctx.author.id)]['assets']['money'] -= cost
                 mine_data[str(ctx.author.id)]['crew'][what] += count
+                mine_data[str(ctx.author.id)]['global stats']['units bought'] += count
+
                 new_cost = crew_values[what]['cost'] * ( 1.2 ** ( mine_data[str(ctx.author.id)]['crew'][what] ) )
-                await ctx.send(f"{ctx.author.name} hired {count} `{what}` for `{cost:,.2f}`. Unit price has increased to `$ {new_cost:,.2f}`. Your funds are now `$ {mine_data[str(ctx.author.id)]['assets']['money']:,.2f}`.")
+
+                await ctx.send(f"{ctx.author.name} purchased {count} `{what}` for `{cost:,.2f}`. Unit price has increased to `$ {new_cost:,.2f}` per unit. Your funds are now `$ {mine_data[str(ctx.author.id)]['assets']['money']:,.2f}`.")
+
                 with open('mine.json', 'w') as f:
                     json.dump(mine_data, f, indent=4)
-                statistics("Idle Mine crew purchased", increase=count)
+
+                statistics("Idle Mine units purchased", increase=count)
+
                 await achievement(
                     ctx=ctx,
                     count=count,
@@ -4093,6 +4164,7 @@ async def mine(ctx, *args):
                         "mine_crew_hired_5k"
                     ]
                 )
+
             else:
                 await ctx.send(f"{ctx.author.name} cannot afford {count} `{what}` for `$ {cost:,.2f}`. Your funds: `$ {mine_data[str(ctx.author.id)]['assets']['money']:,.2f}`")
             
@@ -4103,6 +4175,7 @@ async def mine(ctx, *args):
                 mine_data = json.load(outfile)
                 user_data = mine_data[str(ctx.author.id)]
             
+            money_before_selling = user_data['assets']['gems']
             gems = int(user_data['assets']['gems'])
             ascension = user_data['multi']['ascension']
             
@@ -4128,6 +4201,7 @@ async def mine(ctx, *args):
             
             mine_data[str(ctx.author.id)]['assets']['gems'] -= count_to_sell
             mine_data[str(ctx.author.id)]['assets']['money'] += round(earning, 2)
+            mine_data[str(ctx.author.id)]['global stats']['money earned'] += round(earning, 2)
 
             with open('mine.json', 'w') as f:
                 json.dump(mine_data, f, indent=4)
@@ -4135,7 +4209,7 @@ async def mine(ctx, *args):
                 ascension_bonus_text = f" (including +`{round(ascension, 4):,}% ($ {round( earning - ( count_to_sell * gems_value_multi ), 2 ):,})` Ascension Bonus)"
             else:
                 ascension_bonus_text = ''
-            await ctx.send(f"{ctx.author.name} sold `💎 {count_to_sell}` gems for a total of `$ {earning:,.2f}` at `$ {gems_value_multi:,.2f}/💎 gem` market price{ascension_bonus_text}! Your funds are now `$ {mine_data[str(ctx.author.id)]['assets']['money']:,.2f}`.")
+            await ctx.send(f"{ctx.author.name} sold `💎 {count_to_sell}` gems for a total of `$ {earning:,.2f}` at `$ {gems_value_multi:,.2f}/💎 gem` market price{ascension_bonus_text}! Your funds have increased from `$ {money_before_selling:,.2f}` to `$ {mine_data[str(ctx.author.id)]['assets']['money']:,.2f}`.")
 
             statistics("Idle Mine money earned", round(earning, 2))
             await achievement(
@@ -4229,6 +4303,11 @@ async def mine(ctx, *args):
                 'crew': {},
                 'multi': {
                     'ascension': 0.0
+                },
+                'global stats': {
+                    "gems mined": user_data['global stats']['gems mined'],
+                    "money earned": user_data['global stats']['money earned'],
+                    "units bought": user_data['global stats']['units bought']
                 }
             }
             for key in crew_values:
@@ -4246,8 +4325,8 @@ No sooner have you signed the relevant paperworks and submitted them to your glo
 *\"Kindly find attached the deeds to new lands waiting to be mined, $10.00 in cash, and our friends at the stock exchange will ensure you receive a bonus of {ascension_bonus:,}% on all sales of gems moving forward.\"*
 
 *Best regards,*
-*Madam Ruby Gemina*
-*Glorious President of [REDACTED]*
+
+{mine_officials_signatures['president']}
 
 You stand before the barren lands that have been bestowed upon you, clenching $10 in your fist. You can't help but ask yourself... *Was it worth it*?
 But there is not time ponder. No time to lose. It's time to start over. To get to work. For the glory of capitalism. For the glory of [REDACTED].
@@ -4336,6 +4415,23 @@ But there is not time ponder. No time to lose. It's time to start over. To get t
             )
 
             return
+        
+        elif arg.lower() == 'stats':
+            embed = discord.Embed(title=f"{ctx.author.name}'s Idle Mine Stats", description="Global Idle Miner stats since the beginning, ignoring ascension wipes.")
+
+            with open('mine.json', 'r') as outfile:
+                mine_data = json.load(outfile)
+
+            user_data = mine_data[str(ctx.author.id)]
+
+            for stat, numbers in user_data['global stats'].items():
+                embed.add_field(
+                    name=stat.capitalize(),
+                    value=human_num(numbers)
+                )
+
+            await ctx.send(embed=embed)
+            return
 
         else:
             await ctx.send(f"Argument `{arg}` is not recognized.")
@@ -4397,16 +4493,22 @@ async def mineguide(ctx):
     )
     embed.add_field(
         name="About",
-        value="Idle Mine is a Discord idling game. Purchase \"crew\" with money, produce gems, sell them, and use your newfound wealth to expand your crew and mine faster!\n\nIssue the `mine` command to view your mine. Arguments can be included after the command to interact (see below).",
+        value="Idle Mine is a Discord idling game. Purchase `units` with money, mine `gems`, sell them, and use your newfound wealth to expand your crew and mine faster!\n\nIssue the `mine` command to view your mine. Arguments can be included after the command to interact (see below).",
         inline=False
     )
     embed.add_field(
         name="Command Arguments",
-        value=f"""- `shop` - View the shop to buy crew.
-- `buy` `crew` - Exchange money for the specified `crew` (see `shop` for details). Example: `buy "jumbo drill"`
+        value=f"""- `shop` - View the available units and their prices.
+- `buy` `unit` `count` - Exchange money for the specified `unit` (see `shop` for details). Optional argument `count` to purchase in bulk must be an integer representing the number of units to purchase, or `max` to purchase the maximum number of units.
+- Examples:
+ - `buy "jumbo drill"`
+ - `buy jdr`
+ - `buy jdr 3`
+ - `buy jdr max`
 - `sell` `amount` - Sell your gems for money at current market price (see `market` for market price before selling). Takes an optional `amount` argument, else sells all supplies.
 - `market` - Displays the current `gem -> money` exchange rate.
 - `ascend` - Wipes all progress to gain an Ascension Bonus which multiplies the money earned when selling gems. Displays information and prompts for a confirmation before proceeding.
+- `stats` - Displays your global stats since starting, ignoring ascension wipes.
         """,
         inline=False
     )
@@ -4418,16 +4520,200 @@ async def mineguide(ctx):
 
     await ctx.send(embed=embed)
 
+class MineEvent():
+    def __init__(self, message: str, desc: str, event_type: Literal['money', 'gems', 'units'], event_value_change: int, event_unit_type: str = "", event_requirement: Optional[Tuple[str, int, bool]] = None, requirement_has_unit: Optional[Tuple[str, int]] = None):
+        
+        global crew_values
+
+        self.message = message
+        self.desc = desc
+        self.event_type = event_type
+        self.event_value_change = event_value_change
+        self.event_unit_type = event_unit_type
+        self.event_requirement = event_requirement # Must be tuple (req_type=['money', 'gems', 'units', 'gems/min'], count=1, more_than=None)
+        self.requirement_has_unit = requirement_has_unit # Must be tuple (unit='miner', count=1)
+
+    def process(self):
+        with open('mine.json', 'r') as outfile:
+            mine_data = json.load(outfile)
+        
+        # If the event has requirements, split the data from the tuple
+        if self.event_requirement:
+            req_type = self.event_requirement[0] # str
+            count = self.event_requirement[1] # int
+            more_than = self.event_requirement[2] # bool
+        
+        # Initiate list for return data
+        affected_players = []
+        
+        for user, info in mine_data.items():
+
+            assets = info['assets']
+            units = info['crew']
+
+            # Gems per minute function
+            def gems_per_min_calc():
+                earnings = []
+                for crew, crew_count in info['crew'].items():
+                    earnings.append(crew_count*crew_values[crew]['production'])
+            
+                earnings = round( sum(earnings) )
+
+                return earnings
+
+            # Check for more_than requirements
+            def req_check_if_more_than():
+
+                if req_type == 'gems/min':
+                    return gems_per_min > count
+                elif req_type in ['money', 'gems']:
+                    return assets[req_type] > count
+                else:
+                    return units[self.event_unit_type] > count
+            
+            # Check for less_than requirements
+            def req_check_if_less_than():
+
+                if req_type == 'gems/min':
+                    return gems_per_min < count
+                elif req_type in ['money', 'gems']:
+                    return assets[req_type] < count
+                else:
+                    return units[self.event_unit_type] < count
+            
+            # Calculate player's gems per minute
+            gems_per_min = gems_per_min_calc()
+            
+            # If the event has requirements, check them.
+            # Continue loop without processing event effects if the user doesn't fulfill requirements.
+            if self.event_requirement:
+                if more_than:
+                    if not req_check_if_more_than():
+                        continue
+                elif not more_than:
+                    if not req_check_if_less_than():
+                        continue
+                else:
+                    pass
+            
+            # Check for units possession if required
+            if self.requirement_has_unit:
+                unit_type = self.requirement_has_unit[0]
+                unit_count = self.requirement_has_unit[1]
+                if not units[unit_type] >= unit_count:
+                    continue
+            
+            # Process event to add/remove money, gems, or units
+            if self.event_type == 'money':
+                mine_data[user]['assets']['money'] += round(self.event_value_change, 2)
+            
+            elif self.event_type == 'gems':
+                mine_data[user]['assets']['gems'] += self.event_value_change
+            
+            elif self.event_type == 'units':
+                mine_data[user]['crew'][self.event_unit_type] += self.event_value_change
+
+            # Add this player to the list of players affected by the event
+            affected_players.append(user)
+        
+        # Save data to file
+        with open('mine.json', 'w') as f:
+            json.dump(mine_data, f, indent=4)
+        
+        return affected_players
+
 mine_live_message_id = None
+mine_officials_signatures = {
+    'commodities': "*Flint Rocksteady*\n*Commissioner of Commodity Trade*",
+    'taxes': "*Damond McJewel*\n*National Revenue Agency (NRA)*",
+    'president': "*Madam President Ruby Gemina*\n*Glorious President of [REDACTED]*",
+    'legal': "*Agathe Stones*\n*[REDACTED] Attorney General*",
+    'international': "*Agathe Stones*\n*International Affairs*",
+    'pr': "*Rocky McPebblestone*\n*Public Relations Officer*",
+    'military': "*Jade Gravels*\n*Commander General of [REDACTED] Military Operations*"
+}
+
+mine_event1 = MineEvent(
+    message=f"I have the great pleasure to notify you that a our Immigration Agency has organized a government-funded hiring campaign.\nFive miners have been added to the workforce of employers having at least 1 miner with experience on their team, all paid for by the Government of [REDACTED].\nHave a good day, and all glory to [REDACTED]!\n\n{mine_officials_signatures['international']}",
+    desc="+ 5 miner units have been added to all mining operations which already possess at least 1 miner.",
+    event_type='units',
+    event_unit_type='miner',
+    event_value_change=5,
+    requirement_has_unit=('miner', 1)
+)
+mine_event2 = MineEvent(
+    message=f"A grant of `$ 10,000.00` has been approved for all mining operations producing less than 25k gems per minute.\nThe funds have been deposited directly into the accounts of eligible parties.\n\n{mine_officials_signatures['commodities']}",
+    desc="+ $ 10,000.00 immediately granted to all mining operations with a gems/min rate under 25k.",
+    event_type='money',
+    event_value_change=10000,
+    event_requirement=('gems/min', 25000, False)
+)
+mine_event3 = MineEvent(
+    message=f"As part of the \"Tax The Rich\" program, all mining operation generating over 300k gems/min are taxed $1M, effective immediately.\nThe funds have been debited from the account of all eligible mining operations.\n\n{mine_officials_signatures['taxes']}",
+    desc="- $ 1M immediately debited from all mining operations generating over 300k gems/min.",
+    event_type='money',
+    event_value_change=-1000000,
+    event_requirement=('gems/min', 300000, True)
+)
+mine_event4 = MineEvent(
+    message=f"In an unexpected turn of events, the class action lawsuit against the government of [REDACTED] for commandeering mining operations with unsatisfactory compensation has concluded in favour of the mining industry.\nThe compensation of $2.5M has been provided to each mining operation currently generating at least 300k gems/min.\n\n{mine_officials_signatures['legal']}",
+    desc="+ $ 2.5M immediately granted to all mining operations with a gems/min rate over 300k.",
+    event_type='money',
+    event_value_change=2500000,
+    event_requirement=('gems/min', 300000, True)
+)
+mine_event5 = MineEvent(
+    message=f"As the battle for the freedom of our nation at the borders of our lands intensifies, we regret to inform you that a mandatory draft is in effect.\nWhile you, as an essential asset to the service of [REDACTED], are safe from drafting, the same cannot be said of your mining crew.\nAll mining operations with more than 10 miners have had 3 miners recruited to serve their nation on the battlefield.\nALL GLORY TO [REDACTED].\n\n{mine_officials_signatures['military']}",
+    desc="- 3 miner units removed from all mining operations possessing more than 10 miner units.",
+    event_type='units',
+    event_unit_type='miner',
+    event_value_change=-3,
+    event_requirement=('units', 10, True)
+)
+mine_event6 = MineEvent(
+    message=f"As you all know, the recent flooding has caused significant damage to all mines. Through the assistance of our nation's brave military personnel, your mines were successfully drained.\nMadam President Ruby Gemina has instructed me to bill you $500k to refund the resources that were exhausted in assisting your mining operation. The funds have been debited from the account of each eligible mining operation.\n\n{mine_officials_signatures['military']}",
+    desc="- $500k charged to all mining operations owning at least one mine unit.",
+    event_type='money',
+    event_value_change=-500000,
+    requirement_has_unit=('mine', 1)
+)
+mine_event7 = MineEvent(
+    message=f"A large shipment of smuggled gems have been seized at the border. Normally, smuggled goods are immediately destroyed - however, we have decided it would serve a better purpose if redistributed into the economy through active mining operations.\nMining operations with a minimum production rate of 50k gems/min have each received 500k gems.\n\n{mine_officials_signatures['commodities']}",
+    desc="+ 500k gems was sent to all mining operations generating at least 50k gems/min.",
+    event_type='gems',
+    event_value_change=500000,
+    event_requirement=('gems/min', 50000, True)
+)
+mine_event8 = MineEvent(
+    message=f"I have stumbled across a significant number of gems...\nGems that I must get rid off. Quickly. And quietly.\n10k gems are being distributed to smaller, startup mining entreprises. Do what you may with them, but if anyone asks, you've mined those yourself, and this conversation never happened.\n\nP.S. Delete this correspondance ASAP.\n\n{mine_officials_signatures['commodities']}",
+    desc="+ 10k gems have been sent to all mining operations generating less than 2k gems/min.",
+    event_type='gems',
+    event_value_change=500000,
+    event_requirement=('gems/min', 2000, False)
+)
+
+mine_events = [
+    mine_event1,
+    mine_event2,
+    mine_event3,
+    mine_event4,
+    mine_event5,
+    mine_event6,
+    mine_event7,
+    mine_event8
+]
 
 @tasks.loop(seconds=60)
 async def mine_process():
 
     global gems_value_multi
     global mine_live_message_id
+    global mine_events
 
     with open('permanent_variables.json', 'r') as outfile:
         persistent_data = json.load(outfile)
+
+    # MARKET EVENTS
 
     if random.random() < 0.011: # (24 * 60) * 0.011 = 15.84 average triggers per 24h at 1m intervals
         gems_value_multi_to_apply = random.randint(-25, 25)/100.0
@@ -4494,6 +4780,38 @@ async def mine_process():
         except:
             pass
 
+    # END MARKET EVENTS
+    # -----------------
+        
+    # RANDOM EVENTS
+    if random.random() < 0.00035: # 0.00035: # (24 * 60) * 0.00035 = Once every two days average at 1m intervals
+
+        try:
+            cha = bot.get_channel(miners_channel)
+            random_event = random.choice(mine_events)
+            affected_players = random_event.process()
+            if affected_players:
+                players_tags = [f'<@{user}>' for user in affected_players]
+            else:
+                players_tags = ["Nobody"]
+            random_greetings = [
+                "Dear pioneers of the mining industry",
+                "Greetings mine operators",
+                "Hello pioneers of the mining industry",
+                "Dear associates of the mining industry",
+                "Good day to you mining operators",
+                "Dear mining associates",
+                "Hello miners of [REDACTED]",
+                "Greetings hard-working entrepreneurs",
+                "Good day loyal industry partners"
+            ]
+            greeting = random.choice(random_greetings)
+            await cha.send(f"<@&{role_miners}> **GOVERNMENT ALERT:**\n{greeting},\n\n{random_event.message}\n```diff\n{random_event.desc}\n```\n**APPLIES TO:** {' '.join([tag for tag in players_tags])}")
+        except:
+            pass
+        
+    # MINE PROCESS
+
     with open('mine.json', 'r') as outfile:
         mine_data = json.load(outfile)
 
@@ -4501,7 +4819,8 @@ async def mine_process():
         return
 
     # mine_live_message embed
-    embed = discord.Embed(title=f"Mine Live Feed", color=bot_color)
+    unix_timestamp = int(time.mktime((datetime.now()+timedelta(seconds=61)).timetuple()))
+    embed = discord.Embed(title=f"Mine Live Feed", description=f"Next drop <t:{unix_timestamp}:R>", color=bot_color)
 
     try:
         for userID, data in mine_data.items():
@@ -4512,6 +4831,7 @@ async def mine_process():
             earnings = round( sum(earnings) )
 
             mine_data[str(userID)]['assets']['gems'] += earnings
+            mine_data[str(userID)]['global stats']['gems mined'] += earnings
             
             user = bot.get_user(int(userID))
             embed.add_field(
@@ -4679,7 +4999,7 @@ async def help(ctx, query=None):
         ("reminders",
          "Lists user's reminders."),
 
-        ("mine `shop` `buy` `sell` `market`",
+        ("mine `shop` `buy` `sell` `market` `ascend` `stats`",
          f"Play the mining idle game. Non-argument displays your mine's information. See See `mineguide` (`{prefixes[0]}mineguide`) for details.")
     ]
 
