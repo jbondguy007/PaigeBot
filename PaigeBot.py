@@ -48,6 +48,7 @@ tc_holo_rarity = 0.04
 
 prevent_binder_command = False
 prevent_gtp_command = False
+prevent_mine_command = False
 
 bot_color = 0x9887ff
 gold_color = 0xffff00
@@ -756,9 +757,10 @@ async def on_connect():
 
 @bot.event
 async def on_command_error(ctx, error):
-    global prevent_binder_command, prevent_gtp_command
+    global prevent_binder_command, prevent_gtp_command, prevent_mine_command
     prevent_binder_command = False
     prevent_gtp_command = False
+    prevent_mine_command = False
     print(f"ERROR: {str(error)}")
     traceback.print_exception(type(error), error, error.__traceback__)
     await ctx.send(f"<:warning:1077420799713087559> Failure to process:\n`{str(error)}`")
@@ -3994,6 +3996,12 @@ gems_value_multi = persistent_data['gems_multi']
 @commands.max_concurrency(number=1, per=commands.BucketType.user, wait=False)
 async def mine(ctx, *args):
 
+    global prevent_mine_command
+
+    if prevent_mine_command:
+        await ctx.send(f"<@{ctx.author.id}> gems drop in progress! Try again in a second.")
+        return
+
     # Initiate user in file
     with open('mine.json', 'r') as outfile:
         mine_file = json.load(outfile)
@@ -4175,7 +4183,7 @@ async def mine(ctx, *args):
                 mine_data = json.load(outfile)
                 user_data = mine_data[str(ctx.author.id)]
             
-            money_before_selling = user_data['assets']['gems']
+            money_before_selling = user_data['assets']['money']
             gems = int(user_data['assets']['gems'])
             ascension = user_data['multi']['ascension']
             
@@ -4703,8 +4711,11 @@ mine_events = [
     mine_event8
 ]
 
-@tasks.loop(seconds=60)
+@tasks.loop(seconds=5)
 async def mine_process():
+
+    global prevent_mine_command
+    prevent_mine_command = True
 
     global gems_value_multi
     global mine_live_message_id
@@ -4809,6 +4820,9 @@ async def mine_process():
             await cha.send(f"<@&{role_miners}> **GOVERNMENT ALERT:**\n{greeting},\n\n{random_event.message}\n```diff\n{random_event.desc}\n```\n**APPLIES TO:** {' '.join([tag for tag in players_tags])}")
         except:
             pass
+    
+    # END RANDOM EVENTS
+    # -----------------
         
     # MINE PROCESS
 
@@ -4816,10 +4830,11 @@ async def mine_process():
         mine_data = json.load(outfile)
 
     if not mine_data:
+        prevent_mine_command = False
         return
 
     # mine_live_message embed
-    unix_timestamp = int(time.mktime((datetime.now()+timedelta(seconds=61)).timetuple()))
+    unix_timestamp = int(time.mktime((datetime.now()+timedelta(seconds=60)).timetuple()))
     embed = discord.Embed(title=f"Mine Live Feed", description=f"Next drop <t:{unix_timestamp}:R>", color=bot_color)
 
     try:
@@ -4873,6 +4888,8 @@ async def mine_process():
 
     with open('mine.json', 'w') as f:
         json.dump(mine_data, f, indent=4)
+    
+    prevent_mine_command = False
 
 # HELP COMMANDS
 
