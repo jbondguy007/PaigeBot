@@ -4711,7 +4711,7 @@ mine_events = [
     mine_event8
 ]
 
-@tasks.loop(seconds=5)
+@tasks.loop(seconds=60)
 async def mine_process():
 
     global prevent_mine_command
