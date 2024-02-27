@@ -118,14 +118,14 @@ s3 = boto3.client(
 
 # FUNCTIONS
 
-magnitudeDict={0:'', 1:'K', 2:'M', 3:'B', 4:'T', 5:'Qa', 6:'Qi', 7:'Sx', 8:'Sp', 9:'Oc', 10:'Nm', 11:'Dc'}
+magnitudeDict={0:'', 1:' K', 2:' M', 3:' B', 4:' T', 5:' Qa', 6:' Qi', 7:' Sx', 8:' Sp', 9:' Oc', 10:' Nm', 11:' Dc'}
 def human_num(num):
-    num=floor(num)
+    floor_num=floor(num)
     magnitude=0
-    while num>=1000.0:
+    while floor_num>=1000.0:
         magnitude+=1
-        num=num/1000.0
-    return(f'{round(floor(num*100.0)/100.0) if not magnitude else floor(num*100.0)/100.0} {magnitudeDict[magnitude]}')
+        floor_num=floor_num/1000.0
+    return(f'{num if not magnitude else floor(floor_num*100.0)/100.0}{magnitudeDict[magnitude]}')
 
 def upload_backups():
     BUCKET = 'paigebot-backups'
@@ -3995,6 +3995,18 @@ with open('permanent_variables.json', 'r') as outfile:
     persistent_data = json.load(outfile)
 gems_value_multi = persistent_data['gems_multi']
 
+async def mine_max_unit_afford_count(money, crew_base_value, crew_owned_count):
+    total_cost = 0
+    counter = 0
+
+    while total_cost <= money:
+        counter += 1
+        total_cost = sum(crew_base_value * (1.2 ** (crew_owned_count + counted)) for counted in range(counter))
+
+    counter -= 1
+    
+    return counter
+
 @bot.command()
 @commands.max_concurrency(number=1, per=commands.BucketType.user, wait=False)
 async def mine(ctx, *args):
@@ -4040,16 +4052,18 @@ async def mine(ctx, *args):
 
             with open('mine.json', 'r') as outfile:
                 mine_data = json.load(outfile)
-                user_data = mine_data[str(ctx.author.id)]
+            user_data = mine_data[str(ctx.author.id)]
+            money = user_data['assets']['money']
 
-            embed = discord.Embed(title=f"{ctx.author.name}'s Mine Shop", description=f"Money: $ {user_data['assets']['money']:,.2f}", color=bot_color)
+            embed = discord.Embed(title=f"{ctx.author.name}'s Mine Shop", description=f"Money: $ {money:,.2f}{f' ({human_num(money)})' if money > 999.99 else ''}", color=bot_color)
 
             for crew, crew_info in crew_values.items():
 
                 cost = crew_info['cost']*(1.2**(mine_data[str(ctx.author.id)]['crew'][crew]))
+                max_buy = await mine_max_unit_afford_count(money=user_data['assets']['money'], crew_base_value=crew_info['cost'], crew_owned_count=user_data['crew'][crew])
                 embed.add_field(
                     name=f"{crew.title()} (`{crew_info['abbreviation']}`)",
-                    value=f"Cost: $ {cost:,.2f}\nproduction: {crew_info['production']:,} 💎/min",
+                    value=f"Cost: $ {cost:,.2f}{f' ({human_num(cost)})' if cost > 999.99 else ''}\nCan Afford: {max_buy}\nProduction: {crew_info['production']:,} 💎/min",
                     inline=False
                 )
             
@@ -4088,19 +4102,8 @@ async def mine(ctx, *args):
 
             if count == "max":
 
-                total_cost = 0
-                counter = 0
-
-                while total_cost <= user_money:
-                    counter += 1
-                    total_cost = sum(crew_base_value * (1.2 ** (user_crew_count + counted)) for counted in range(counter))
-
-                counter -= 1
-
-                if counter < 1:
-                    counter = 1
-
-                count = counter
+                counted = await mine_max_unit_afford_count(money=user_money, crew_base_value=crew_base_value, crew_owned_count=user_crew_count)
+                count = max(counted, 1)
 
             all_costs = [ crew_base_value * (1.2 ** ( user_crew_count + counted ) ) for counted in range(count)]
 
@@ -4115,7 +4118,7 @@ async def mine(ctx, *args):
                     },
                     'jumbo drill': {
                         'title': "Industrialization",
-                        'description': "As time passes, your mining operation grows faster than expected. You're experiencing rapid growth, the cash flow is good, and your expanding your business quickly."
+                        'description': "As time passes, your mining operation grows faster than expected. You're experiencing rapid growth, the cash flow is good, and you're expanding your business quickly."
                     },
                     'mine': {
                         'title': "Conglomerate",
@@ -4216,11 +4219,23 @@ async def mine(ctx, *args):
 
             with open('mine.json', 'w') as f:
                 json.dump(mine_data, f, indent=4)
-            if user_data['multi']['ascension'] > 0.0:
-                ascension_bonus_text = f" (including +`{round(ascension, 4):,}% ($ {round( earning - ( count_to_sell * gems_value_multi ), 2 ):,})` Ascension Bonus)"
-            else:
-                ascension_bonus_text = ''
-            await ctx.send(f"{ctx.author.name} sold `💎 {count_to_sell}` gems for a total of `$ {earning:,.2f}` at `$ {gems_value_multi:,.2f}/💎 gem` market price{ascension_bonus_text}! Your funds have increased from `$ {money_before_selling:,.2f}` to `$ {mine_data[str(ctx.author.id)]['assets']['money']:,.2f}`.")
+
+            await ctx.send(f"""
+```diff
+{ctx.author.name}'s Sale Receipt
+__________________________________________
+                    |
+- Sold:             |  💎 {count_to_sell:,}{f' ({human_num(count_to_sell)})' if count_to_sell > 999.99 else ''} gem(s)
+                    |
+Gems Market Value:  | x $ {gems_value_multi:,.2f}/💎
+Ascension Bonus:    | + $ {round( earning - ( count_to_sell * gems_value_multi ), 2 ):,} ({round(ascension, 4):,}%)
++ TOTAL:            |   $ {earning:,.2f}{f' ({human_num(earning)})' if earning > 999.99 else ''}
+                    |
+Previous Balance:   |   $ {money_before_selling:,.2f}{f' ({human_num(money_before_selling)})' if money_before_selling > 999.99 else ''}
+New Balance:        |   $ {mine_data[str(ctx.author.id)]['assets']['money']:,.2f}{f' ({human_num(mine_data[str(ctx.author.id)]["assets"]["money"])})' if mine_data[str(ctx.author.id)]["assets"]["money"] > 999.99 else ''}
+
+```
+""")
 
             statistics("Idle Mine money earned", round(earning, 2))
             await achievement(
@@ -4428,7 +4443,7 @@ But there is not time ponder. No time to lose. It's time to start over. To get t
             return
         
         elif arg.lower() == 'stats':
-            embed = discord.Embed(title=f"{ctx.author.name}'s Idle Mine Stats", description="Global Idle Miner stats since the beginning, ignoring ascension wipes.")
+            embed = discord.Embed(title=f"{ctx.author.name}'s Idle Mine Stats", description="Global Idle Miner stats since the beginning, ignoring ascension wipes.", color=bot_color)
 
             with open('mine.json', 'r') as outfile:
                 mine_data = json.load(outfile)
@@ -4456,23 +4471,28 @@ But there is not time ponder. No time to lose. It's time to start over. To get t
     embed = discord.Embed(title=f"{ctx.author.name}'s Mine", color=bot_color)
 
     gems_earnings = {}
+
     for crew, crew_count in user_data['crew'].items():
         gems_earnings[crew] = (crew_count*crew_values[crew]['production'])
+
     gems_earnings_total = round( sum( gems_earnings.values() ) )
+    gems_possession = user_data['assets']['gems']
+    money_possession = user_data['assets']['money']
+
     embed.add_field(
-            name="Gems",
-            value=f"💎 {user_data['assets']['gems']:,} (+{gems_earnings_total:,}/min)",
+            name="Gems 💎",
+            value=f"{gems_possession:,}{f' ({human_num(gems_possession)})' if gems_possession > 999.99 else ''}\n+ {gems_earnings_total:,}/min{f' ({human_num(gems_earnings_total)})' if gems_earnings_total > 999.99 else ''}",
             inline=False
         )
     
     embed.add_field(
-            name="Money",
-            value=f"$ {user_data['assets']['money']:,.2f}",
+            name="Money 💵",
+            value=f"$ {money_possession:,.2f}{f' ({human_num(money_possession)})' if money_possession > 999.99 else ''}",
             inline=False
         )
     
     embed.add_field(
-        name="Ascension Bonus",
+        name="Ascension Bonus 📈",
         value=f"{round(user_data['multi']['ascension'], 4)}% money earned on gems sales"
     )
     
@@ -4485,7 +4505,7 @@ But there is not time ponder. No time to lose. It's time to start over. To get t
     for crew, count in user_data['crew'].items():
         embed.add_field(
             name=f"{crew.title()} (+{crew_values[crew]['production']:,} 💎/min)",
-            value=f"{count:,} (+{gems_earnings[crew]:,} 💎/min)",
+            value=f"{count:,} (+{gems_earnings[crew]:,}/min)",
             inline=False
         )
     
