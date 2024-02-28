@@ -163,7 +163,7 @@ def upload_backups():
         'slots_prizes.json',
         'slots_blacklist.json',
         'bug_reports.json',
-        'last_checked_active_giveaways.json'
+        'last_checked_active_giveaways.json',
         'achievements.json',
         'achievements_usersdata.json',
         'statistics.json',
@@ -4007,7 +4007,7 @@ async def mine_max_unit_afford_count(money, crew_base_value, crew_owned_count):
     
     return counter
 
-@bot.command()
+@bot.command(aliases=[ 'm' ])
 @commands.max_concurrency(number=1, per=commands.BucketType.user, wait=False)
 async def mine(ctx, *args):
 
@@ -4063,7 +4063,7 @@ async def mine(ctx, *args):
                 max_buy = await mine_max_unit_afford_count(money=user_data['assets']['money'], crew_base_value=crew_info['cost'], crew_owned_count=user_data['crew'][crew])
                 embed.add_field(
                     name=f"{crew.title()} (`{crew_info['abbreviation']}`)",
-                    value=f"Cost: $ {cost:,.2f}{f' ({human_num(cost)})' if cost > 999.99 else ''}\nCan Afford: {max_buy}\nProduction: {crew_info['production']:,} 💎/min",
+                    value=f"Cost: $ {cost:,.2f}{f' ({human_num(cost)})' if cost > 999.99 else ''}\nProduction: {crew_info['production']:,} 💎/min\nCan Afford: {f'{max_buy}' if max_buy else f'None ($ {human_num(cost-money)} more needed)'}",
                     inline=False
                 )
             
@@ -5039,7 +5039,7 @@ async def help(ctx, query=None):
         ("reminders",
          "Lists user's reminders."),
 
-        ("mine `shop` `buy` `sell` `market` `ascend` `stats`",
+        ("mine (aliases: `m`) `shop` `buy` `sell` `market` `ascend` `stats`",
          f"Play the mining idle game. Non-argument displays your mine's information. See See `mineguide` (`{prefixes[0]}mineguide`) for details.")
     ]
 
