@@ -125,7 +125,7 @@ def human_num(num):
     while floor_num>=1000.0:
         magnitude+=1
         floor_num=floor_num/1000.0
-    return(f'{format(num, ',.2f') if not magnitude else floor(floor_num*100.0)/100.0}{magnitudeDict[magnitude]}')
+    return(f"{format(num, ',.2f') if not magnitude else floor(floor_num*100.0)/100.0}{magnitudeDict[magnitude]}")
 
 def upload_backups():
     BUCKET = 'paigebot-backups'
