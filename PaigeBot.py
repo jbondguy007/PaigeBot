@@ -36,7 +36,7 @@ from typing import Literal, Tuple, Optional
 # BOT INFO
 
 botname = "Paige"
-prefixes = ("p!", "P!", "!paige ")
+prefixes = ("p!", "P!", "!paige ", "p.", "P.")
 bot_birthdate = "February 20, 2023"
 bot_platform = [platform.system(), platform.release(), platform.python_version()]
 
@@ -125,7 +125,7 @@ def human_num(num):
     while floor_num>=1000.0:
         magnitude+=1
         floor_num=floor_num/1000.0
-    return(f'{num if not magnitude else floor(floor_num*100.0)/100.0}{magnitudeDict[magnitude]}')
+    return(f'{format(num, ',.2f') if not magnitude else floor(floor_num*100.0)/100.0}{magnitudeDict[magnitude]}')
 
 def upload_backups():
     BUCKET = 'paigebot-backups'
@@ -4228,7 +4228,7 @@ __________________________________________
 - Sold:             |  💎 {count_to_sell:,}{f' ({human_num(count_to_sell)})' if count_to_sell > 999.99 else ''} gem(s)
                     |
 Gems Market Value:  | x $ {gems_value_multi:,.2f}/💎
-Ascension Bonus:    | + $ {round( earning - ( count_to_sell * gems_value_multi ), 2 ):,} ({round(ascension, 4):,}%)
+Ascension Bonus:    | + $ {round( earning - ( count_to_sell * gems_value_multi ), 2 )+0.0:,} ({round(ascension, 4):,}%)
 + TOTAL:            |   $ {earning:,.2f}{f' ({human_num(earning)})' if earning > 999.99 else ''}
                     |
 Previous Balance:   |   $ {money_before_selling:,.2f}{f' ({human_num(money_before_selling)})' if money_before_selling > 999.99 else ''}
