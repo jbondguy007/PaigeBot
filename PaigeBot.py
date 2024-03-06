@@ -850,7 +850,8 @@ async def info(ctx):
     with open('statistics.json') as feedsjson:
         current_stats = json.load(feedsjson)
     commands_processed_since_reboot = current_stats['Commands count']-glb_stats_at_reboot['Commands count']
-    await ctx.send(f"Hi, {botname} here communicating to you from <@172522306147581952>'s {platform.system()} {platform.release()}! I was born on {bot_birthdate}, and am running on Python v{platform.python_version()}.\nUptime is `{now-glb_uptime_start}`. {commands_processed_since_reboot} commands have been processed since last reboot. :muscle:\n\nI'm happy to help, just issue the command `p!help` for a list of commands.",
+    prefixes_listed = ", ".join(["`"+prefix+"`" for prefix in prefixes])
+    await ctx.send(f"Hi, {botname} here communicating to you from <@172522306147581952>'s {platform.system()} {platform.release()}! I was born on {bot_birthdate}, and am running on Python v{platform.python_version()}.\nUptime is `{now-glb_uptime_start}`. {commands_processed_since_reboot} commands have been processed since last reboot. :muscle:\n\nMy supported prefixes are: {prefixes_listed}\nI'm happy to help, just issue the command `p!help` for a list of commands.",
                    allowed_mentions=discord.AllowedMentions(users=False))
     await achievement(ctx=ctx, achievement_ids=['misc_info_command'])
 
