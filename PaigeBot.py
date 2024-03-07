@@ -339,7 +339,7 @@ def fetch_raw_deadlines():
     deadlines_list = []
 
     for txt in items:
-        matches = re.search(r"(.+) assigned to (.+) \[Deadline: (\d{1,2}(?:st|nd|rd|th){1} of [A-Za-z]+)(?: - (SUBMITTED|CANCELLED))?", txt)
+        matches = re.search(r"(.+) assigned to (.+) \[Deadline: (\d{1,2}(?:st|nd|rd|th){1} of [A-Za-z]+|TBD)(?: - (SUBMITTED|CANCELLED))?", txt)
         deadline = {}
         deadline['Game'] = matches.group(1)
         deadline['Assigned'] = matches.group(2)
@@ -912,33 +912,51 @@ async def deadlines(ctx):
 
     for assignment in deadlines[:25]:
 
-        match = re.search(r'\b(\d+)(st|nd|rd|th)\b', assignment['Deadline'])
-        day = match.group(1)
-        date = datetime.strptime(assignment['Deadline'].replace(match.group(), ''), ' of %B')
-        date = date.replace(day=int(day))
+        if assignment['Deadline'] == 'TBD':
 
-        is_past_due = ":warning:" if datetime.strptime(f"{date.strftime('%B %d')} {datetime.now().year}", '%B %d %Y').date() < datetime.today().date() else ""
+            embed.add_field(
+                name=f"{assignment['Game']}",
+                value=f"• Assigned: `{assignment['Assigned']}`\n• Deadline: `{assignment['Deadline']}`\n• Status: `{assignment['Status']}`",
+                inline=True
+            )
+            
+        else:
+            match = re.search(r'\b(\d+)(st|nd|rd|th)\b', assignment['Deadline'])
+            day = match.group(1)
+            date = datetime.strptime(assignment['Deadline'].replace(match.group(), ''), ' of %B')
+            date = date.replace(day=int(day))
 
-        embed.add_field(
-            name=f"{assignment['Game']}{is_past_due}",
-            value=f"• Assigned: `{assignment['Assigned']}`\n• Deadline: `{assignment['Deadline']}`\n• Status: `{assignment['Status']}`",
-            inline=True
-        )
+            is_past_due = ":warning:" if datetime.strptime(f"{date.strftime('%B %d')} {datetime.now().year}", '%B %d %Y').date() < datetime.today().date() else ""
+
+            embed.add_field(
+                name=f"{assignment['Game']}{is_past_due}",
+                value=f"• Assigned: `{assignment['Assigned']}`\n• Deadline: `{assignment['Deadline']}`\n• Status: `{assignment['Status']}`",
+                inline=True
+            )
     
     for assignment in deadlines[25:]:
 
-        match = re.search(r'\b(\d+)(st|nd|rd|th)\b', assignment['Deadline'])
-        day = match.group(1)
-        date = datetime.strptime(assignment['Deadline'].replace(match.group(), ''), ' of %B')
-        date = date.replace(day=int(day))
+        if assignment['Deadline'] == 'TBD':
 
-        is_past_due = ":warning:" if datetime.strptime(f"{date.strftime('%B %d')} {datetime.now().year}", '%B %d %Y').date() < datetime.today().date() else ""
+            embed2.add_field(
+                name=f"{assignment['Game']}",
+                value=f"• Assigned: `{assignment['Assigned']}`\n• Deadline: `{assignment['Deadline']}`\n• Status: `{assignment['Status']}`",
+                inline=True
+            )
 
-        embed2.add_field(
-            name=f"{assignment['Game']}{is_past_due}",
-            value=f"• Assigned: `{assignment['Assigned']}`\n• Deadline: `{assignment['Deadline']}`\n• Status: `{assignment['Status']}`",
-            inline=True
-        )
+        else:
+            match = re.search(r'\b(\d+)(st|nd|rd|th)\b', assignment['Deadline'])
+            day = match.group(1)
+            date = datetime.strptime(assignment['Deadline'].replace(match.group(), ''), ' of %B')
+            date = date.replace(day=int(day))
+
+            is_past_due = ":warning:" if datetime.strptime(f"{date.strftime('%B %d')} {datetime.now().year}", '%B %d %Y').date() < datetime.today().date() else ""
+
+            embed2.add_field(
+                name=f"{assignment['Game']}{is_past_due}",
+                value=f"• Assigned: `{assignment['Assigned']}`\n• Deadline: `{assignment['Deadline']}`\n• Status: `{assignment['Status']}`",
+                inline=True
+            )
 
     await ctx.send(embed=embed)
     if len(deadlines) > 25:
@@ -4280,6 +4298,36 @@ New Balance:        |   $ {mine_data[str(ctx.author.id)]['assets']['money']:,.2f
 
             return
         
+        elif arg.lower() == 'sellval':
+            with open('mine.json', 'r') as outfile:
+                mine_data = json.load(outfile)
+                user_data = mine_data[str(ctx.author.id)]
+            
+            gems = int(user_data['assets']['gems'])
+            money = user_data['assets']['money']
+            ascension = user_data['multi']['ascension']
+
+            if len(args) > 1:
+                try:
+                    count_to_sell = int(args[1])
+                    if count_to_sell <= 0 or count_to_sell > gems:
+                        raise(Exception)
+                except:
+                    await ctx.send(f"{ctx.author.name}, error processing `sellval` function with argument `{args[1]}` - must be a positive integer no higher than your current gems count.")
+                    return
+            else:
+                count_to_sell = gems
+
+            earning = round(
+                ( count_to_sell * gems_value_multi ) * (1.0+(ascension/100.0)),
+                2
+            )
+
+            total_money = earning+money
+
+            await ctx.send(f"{ctx.author.name}, selling all your gems now would earn you `$ {earning:,.2f}{f' ({human_num(earning)})' if earning > 999.99 else ''}`.\nYour total funds would be `$ {total_money:,.2f}{f' ({human_num(total_money)})' if total_money > 999.99 else ''}`.")
+            return
+        
         elif arg.lower() == 'market':
             if gems_value_multi > 1.0:
                 highlight = '+ '
@@ -4537,7 +4585,8 @@ async def mineguide(ctx):
  - `buy jdr`
  - `buy jdr 3`
  - `buy jdr max`
-- `sell` `amount` - Sell your gems for money at current market price (see `market` for market price before selling). Takes an optional `amount` argument, else sells all supplies.
+- `sell` `amount` - Sell your gems for money at current market price (see `market` for market price before selling). Takes an optional `amount` argument, else sells all supplies of gems.
+- `sellval` `amount` - Displays the money that would be earned by selling your gems at the current market price, without actually selling the gems. Takes an optional `amount` argument, else calculates all supplies of gems.
 - `market` - Displays the current `gem -> money` exchange rate.
 - `ascend` - Wipes all progress to gain an Ascension Bonus which multiplies the money earned when selling gems. Displays information and prompts for a confirmation before proceeding.
 - `stats` - Displays your global stats since starting, ignoring ascension wipes.
