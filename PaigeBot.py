@@ -4592,7 +4592,7 @@ async def mineguide(ctx):
     )
     embed2.add_field(
         name="buy `unit` `count`",
-        value="View the available units and their prices.\nExamples: `buy \"jumbo drill\"`, `buy jdr`, `buy jdr 3`, `buy jdr max`",
+        value="Exchange money for the specified `unit` (see `shop` for details). Optional argument `count` to purchase in bulk must be an integer representing the number of units to purchase, or `max` to purchase the maximum number of units.",
         inline=False
     )
     embed2.add_field(
