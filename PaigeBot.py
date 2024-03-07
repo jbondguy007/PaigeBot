@@ -4565,7 +4565,7 @@ But there is not time ponder. No time to lose. It's time to start over. To get t
 
 @bot.command()
 async def mineguide(ctx):
-    embed = discord.Embed(title="Idle Mine Guide", description="`mine` command guide", color=bot_color)
+    embed = discord.Embed(title="Idle Mine Guide", color=bot_color)
     embed.add_field(
         name="Introduction",
         value="Well hello there, pioneer of the gemstones mining industry! You've just received your documents authorizing mining activity on your plot of land, you have $10 in allocated funds, and your heart burns with a fire only a [REDACTED] citizen can have! Let's get down to business - our great nation has just gotten out of yet another conflict with the neighbours across the border, and the coffers are empty. The nation of [REDACTED] needs money, and under our feet are billions of dollars' worth of gems, waiting to be plucked out. So let's get to work, eh?",
@@ -4577,29 +4577,51 @@ async def mineguide(ctx):
         inline=False
     )
     embed.add_field(
-        name="Command Arguments",
-        value=f"""- `shop` - View the available units and their prices.
-- `buy` `unit` `count` - Exchange money for the specified `unit` (see `shop` for details). Optional argument `count` to purchase in bulk must be an integer representing the number of units to purchase, or `max` to purchase the maximum number of units.
-- Examples:
- - `buy "jumbo drill"`
- - `buy jdr`
- - `buy jdr 3`
- - `buy jdr max`
-- `sell` `amount` - Sell your gems for money at current market price (see `market` for market price before selling). Takes an optional `amount` argument, else sells all supplies of gems.
-- `sellval` `amount` - Displays the money that would be earned by selling your gems at the current market price, without actually selling the gems. Takes an optional `amount` argument, else calculates all supplies of gems.
-- `market` - Displays the current `gem -> money` exchange rate.
-- `ascend` - Wipes all progress to gain an Ascension Bonus which multiplies the money earned when selling gems. Displays information and prompts for a confirmation before proceeding.
-- `stats` - Displays your global stats since starting, ignoring ascension wipes.
-        """,
-        inline=False
-    )
-    embed.add_field(
         name="Market",
         value="The gems market can be profitable, but also treacherous! In an ever-volatile world, dealing in gemstones can be a fickle matter. Keep an eye on the `market` pricing, and potentially reconsider selling your gems during moments of high exchange rates to maximize profit. The market pricing of gems will occasionally change over the course of the day and the lovely people at our government-approved news outlet will give us a heads up when it happens, but the exact timing is a mystery. Stay on your toes, and move fast!",
         inline=False
     )
 
     await ctx.send(embed=embed)
+
+    embed2 = discord.Embed(title="Idle Mine Guide - Commands", description=f"Command arguments for the `mine` command. Arguments are fed by including them after a space - Example: `{prefixes[0]}mine shop`", color=bot_color)
+    embed2.add_field(
+        name="shop",
+        value="View the available units and their prices.",
+        inline=False
+    )
+    embed2.add_field(
+        name="buy `unit` `count`",
+        value="View the available units and their prices.\nExamples: `buy \"jumbo drill\"`, `buy jdr`, `buy jdr 3`, `buy jdr max`",
+        inline=False
+    )
+    embed2.add_field(
+        name="sell `amount`",
+        value="Sell your gems for money at current market price (see `market` for market price before selling). Takes an optional `amount` argument, else sells all supplies of gems.",
+        inline=False
+    )
+    embed2.add_field(
+        name="sellval `amount`",
+        value="Displays the money that would be earned by selling your gems at the current market price, without actually selling the gems. Takes an optional `amount` argument, else calculates all supplies of gems.",
+        inline=False
+    )
+    embed2.add_field(
+        name="market",
+        value="Displays the current `gem -> money` exchange rate.",
+        inline=False
+    )
+    embed2.add_field(
+        name="ascend",
+        value="Wipes all progress to gain an Ascension Bonus which multiplies the money earned when selling gems. Displays information and prompts for a confirmation before proceeding.",
+        inline=False
+    )
+    embed2.add_field(
+        name="stats",
+        value="Displays your global stats since starting, ignoring ascension wipes.",
+        inline=False
+    )
+
+    await ctx.send(embed=embed2)
 
 class MineEvent():
     def __init__(self, message: str, desc: str, event_type: Literal['money', 'gems', 'units'], event_value_change: int, event_unit_type: str = "", event_requirement: Optional[Tuple[str, int, bool]] = None, requirement_has_unit: Optional[Tuple[str, int]] = None):
