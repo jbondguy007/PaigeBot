@@ -4292,7 +4292,9 @@ New Balance:        |   $ {mine_data[str(ctx.author.id)]['assets']['money']:,.2f
                     "mine_money_earned_10m",
                     "mine_money_earned_100m",
                     "mine_money_earned_1b",
-                    "mine_money_earned_1t"
+                    "mine_money_earned_1t",
+                    "mine_money_earned_1qa",
+                    "mine_money_earned_1qi"
                 ]
             )
 
@@ -4467,7 +4469,9 @@ But there is not time ponder. No time to lose. It's time to start over. To get t
                     "mine_money_earned_10m",
                     "mine_money_earned_100m",
                     "mine_money_earned_1b",
-                    "mine_money_earned_1t"
+                    "mine_money_earned_1t",
+                    "mine_money_earned_1qa",
+                    "mine_money_earned_1qi"
                 ]
             )
             await achievement(
