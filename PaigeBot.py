@@ -110,6 +110,8 @@ chatbot_personality = {"role": "system", "content": "Roleplay a snarky, brash, b
 AWS_ACCESS_KEY = os.getenv("AWS_ACCESS_KEY")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+
 s3 = boto3.client(
     's3',
     aws_access_key_id=AWS_ACCESS_KEY,
@@ -326,28 +328,12 @@ def fetch_all_giveaways():
     return giveaways
 
 def fetch_raw_deadlines():
-    url = 'https://steamcommunity.com/groups/SGMonthlyMagazine/discussions/4/3758852249517533958/'
-    r = requests.get(url)
-    page = bs(r.content, "html.parser")
-    deadlines = page.find_all("ul", {"class": "bb_ul"})
-
-    items = []
-    for list in deadlines:
-        for li in list.find_all('li'):
-            items.append(li.text.strip())
-    
-    deadlines_list = []
-
-    for txt in items:
-        matches = re.search(r"(.+) assigned to (.+) \[Deadline: (\d{1,2}(?:st|nd|rd|th){1} of [A-Za-z]+|TBD)(?: - (SUBMITTED|CANCELLED))?", txt)
-        deadline = {}
-        deadline['Game'] = matches.group(1)
-        deadline['Assigned'] = matches.group(2)
-        deadline['Deadline'] = matches.group(3)
-        deadline['Status'] = matches.group(4) if matches.group(4) else "In Progress"
-        deadlines_list.append(deadline)
-    
-    return deadlines_list
+    sheet_id = '13oNY-6Mh7vNZ4y_QjUOfJteZ38qUaz1lodK5gC1nLQc'
+    api_key = GOOGLE_API_KEY
+    api_url = f'https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/Deadlines!A1:F1000?key={GOOGLE_API_KEY}'
+    r = requests.get(api_url)
+    data = r.json()
+    return data['values']
 
 def fetch_group_members_count():
     url = 'https://steamcommunity.com/groups/SGMonthlyMagazine'
@@ -872,7 +858,7 @@ async def deadline(ctx, username):
 
     deadlines_list = fetch_raw_deadlines()
 
-    user_deadlines = [item for item in deadlines_list if item['Assigned'] == username and item['Status'] != "SUBMITTED"]
+    user_deadlines = [{"Game": item[1], "Assigned": item[2], "Deadline": item[3], "Status": item[5]} for item in deadlines_list[1:] if item[2] == username and item[5] not in ['SUBMITTED', 'CANCELLED']]
 
     embed = discord.Embed(title=f"Deadlines for {username}", description="", color=bot_color)
 
@@ -903,9 +889,9 @@ async def deadline(ctx, username):
 @bot.command()
 async def deadlines(ctx):
 
-    deadlines_list = fetch_raw_deadlines()
+    deadlines_raw = fetch_raw_deadlines()
 
-    deadlines = [item for item in deadlines_list if item['Status'] not in ['SUBMITTED', 'CANCELLED']]
+    deadlines = [{"Game": item[1], "Assigned": item[2], "Deadline": item[3], "Status": item[5]} for item in deadlines_raw[1:] if item[5] not in ['SUBMITTED', 'CANCELLED']]
 
     embed = discord.Embed(title=f"Deadlines", description="List of all current assignments, excluding submitted or cancelled.", color=bot_color)
     embed2 = discord.Embed(title=f"Deadlines (continued...)", description="List of all current assignments, excluding submitted or cancelled.", color=bot_color)
@@ -921,12 +907,10 @@ async def deadlines(ctx):
             )
             
         else:
-            match = re.search(r'\b(\d+)(st|nd|rd|th)\b', assignment['Deadline'])
-            day = match.group(1)
-            date = datetime.strptime(assignment['Deadline'].replace(match.group(), ''), ' of %B')
-            date = date.replace(day=int(day))
 
-            is_past_due = ":warning:" if datetime.strptime(f"{date.strftime('%B %d')} {datetime.now().year}", '%B %d %Y').date() < datetime.today().date() else ""
+            date = datetime.strptime(assignment['Deadline'], '%B %d')
+
+            is_past_due = " :warning:" if datetime.strptime(f"{date.strftime('%B %d')} {datetime.now().year}", '%B %d %Y').date() < datetime.today().date() else ""
 
             embed.add_field(
                 name=f"{assignment['Game']}{is_past_due}",
@@ -945,12 +929,10 @@ async def deadlines(ctx):
             )
 
         else:
-            match = re.search(r'\b(\d+)(st|nd|rd|th)\b', assignment['Deadline'])
-            day = match.group(1)
-            date = datetime.strptime(assignment['Deadline'].replace(match.group(), ''), ' of %B')
-            date = date.replace(day=int(day))
 
-            is_past_due = ":warning:" if datetime.strptime(f"{date.strftime('%B %d')} {datetime.now().year}", '%B %d %Y').date() < datetime.today().date() else ""
+            date = datetime.strptime(assignment['Deadline'], '%B %d')
+
+            is_past_due = " :warning:" if datetime.strptime(f"{date.strftime('%B %d')} {datetime.now().year}", '%B %d %Y').date() < datetime.today().date() else ""
 
             embed2.add_field(
                 name=f"{assignment['Game']}{is_past_due}",
