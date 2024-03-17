@@ -5467,7 +5467,12 @@ async def reminders_process():
 
             if reminder_timer < now:
                 cha = bot.get_channel(data['channel'])
-                await cha.send(content=f"<@{userID}> Reminder: {data['reminder']}")
+
+                try:
+                    await cha.send(content=f"<@{userID}> Reminder: {data['reminder']}")
+                except:
+                    print(f"ALERT: Failed to send reminder {reminderID}. Skipping.")
+                    return
     
                 deletion_list.append( (userID, reminderID) )
 
