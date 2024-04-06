@@ -1964,8 +1964,14 @@ def tc_generator(user, holo=True, legacy=False):
     print(f"Generating card {user}...")
 
     if legacy:
+
+        try:
+            user_id = user.id
+        except:
+            user_id = user
+
         base_img = Image.new( mode = "RGBA", size = (300, 400), color = (255, 255, 255) )
-        card_img = Image.open(f"tradingcards/generated/{user.id}{'_holo' if holo else''}.png").convert('RGBA') # Potentially breaking
+        card_img = Image.open(f"tradingcards/generated/{user_id}{'_holo' if holo else''}.png").convert('RGBA') # Potentially breaking
         base_img.paste(card_img, (0, 0), card_img)
         contrast = ImageEnhance.Contrast(base_img)
         base_img = contrast.enhance(0.6)
@@ -1980,7 +1986,7 @@ def tc_generator(user, holo=True, legacy=False):
         draw.text((50, 200-font_height), "LEGACY", font=font, fill="black", stroke_width=3, stroke_fill="white")
 
         # Save the resulting image
-        card = f"{user.id}{'_holo' if holo else ''}"
+        card = f"{user_id}{'_holo' if holo else ''}"
         base_img.save(f'tradingcards/generated/{card}.png')
 
         return card
@@ -4839,8 +4845,8 @@ async def mine_process():
                 "Global climate change affects gemstone formations, making certain varieties even rarer and more valuable.",
                 "A breakthrough in technology allows for the creation of hyper-realistic gemstone replicas, increasing appreciation for authentic gems.",
                 "A fashion icon declares gem-embedded accessories as a must-have trend, driving demand for unique and high-quality gemstones.",
-                "An influencer starts a viral challenge to showcase their favorite gemstones, creating a social buzz and increasing gemstone desirability."
-                "The government has commandeered mining equipment from a rival mining company to stage a rescue after the collapse of a [REDACTED] in [REDACTED]",
+                "An influencer starts a viral challenge to showcase their favorite gemstones, creating a social buzz and increasing gemstone desirability.",
+                "The government has commandeered mining equipment from a rival mining company to stage a rescue after the collapse of a [REDACTED] in [REDACTED], reducing their production rate and increasing gems value.",
             ]
         else:
             highlight = '- '
