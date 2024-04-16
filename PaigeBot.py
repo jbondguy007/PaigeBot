@@ -55,6 +55,8 @@ gold_color = 0xffff00
 
 staff_channel = 1067986921487351820
 bot_channel = 1077994256288981083
+bot_channel2 = 1159186388827246682
+idle_miners_channel = 1206981787323211836
 giveaway_notifications_channel = 1086014406091100201
 general_channel = 1067986921487351826
 test_server_channel = 630835643953709066
@@ -5348,7 +5350,10 @@ async def help(ctx, query=None):
          "Runs a manual backup of PaigeBot's files and database. This task is already executed daily."),
 
         ("dailynotif `message`",
-         "Sets a `message` to be sent in the general chat at 12 PM CST daily. If `message` argument is one of `none`, `clear`, or not provided, the daily notification is deleted and disabled until set again.")
+         "Sets a `message` to be sent in the general chat at 12 PM CST daily. If `message` argument is one of `none`, `clear`, or not provided, the daily notification is deleted and disabled until set again."),
+
+        ("maintenance `start` `end`",
+         "BOTMASTER ONLY - Sends an offline/online notification to all bot channels.")
     ]
 
     # Individual help by query.
@@ -5501,8 +5506,6 @@ async def aipurge(ctx):
     chatbot_log = []
     await ctx.send("AI chatlog purged!")
 
-# CONTRIBUTOR COMMANDS
-
 @bot.command()
 @commands.has_any_role(role_staff)
 async def backup(ctx):
@@ -5523,6 +5526,33 @@ def fetch_giveaway_info(url):
         "steam_link": steam_link,
         "image": image
     })
+
+@bot.command()
+@commands.has_any_role(role_staff)
+async def maintenance(ctx, arg='start'):
+
+    if not ctx.author.id == jbondguy007_userID:
+        await ctx.send("Botmaster command only!")
+        return
+    
+    channels = [bot_channel, bot_channel2, idle_miners_channel]
+    
+    if arg.lower() == 'start':
+        for channel in channels:
+            ch = bot.get_channel(channel)
+            await ch.send(f"# {botname} is going offline for maintenance! 🔧")
+
+    elif arg.lower() == 'end':
+        for channel in channels:
+            ch = bot.get_channel(channel)
+            await ch.send(f"# Maintenance completed - {botname} is back online! 📡")
+    
+    else:
+        await ctx.send(f"Unrecognized argument `{arg}`.")
+
+    await ctx.send(f"Maintenance `{arg}` notification sent out!")
+
+# CONTRIBUTOR COMMANDS
 
 @bot.command()
 @commands.has_any_role(role_fullmember, role_contributors, role_staff)
