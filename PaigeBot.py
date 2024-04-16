@@ -4978,6 +4978,224 @@ async def mine_process():
     
     prevent_mine_command = False
 
+# civ_name_gen_kws_consonants = ['b', 'd', 'g', 'h', 'k', 'l', 'm', 'n', 'p', 'r', 's', 't', 'v', 'z']
+# civ_name_gen_kws_vowels = ['a', 'e', 'i', 'o', 'u', 'oo', 'ee']
+
+# civ_banned_names = ['poo', 'poop', 'rape', 'nazi', 'puke', 'hole', 'pube', 'doodoo', 'pee', 'peepee', 'pee-pee', 'poo-poo', 'doo-doo']
+
+# def civ_name_generator():
+#     while True:
+#         syllables_count = random.randint(2, 3)
+#         syllables_count += random.choice([0, 0, 1])
+#         syllables = []
+#         hyphen_used = False
+#         name = ''
+#         for c in range(syllables_count):
+#             syllable = ''.join([
+#                 random.choice(civ_name_gen_kws_consonants),
+#                 random.choice(civ_name_gen_kws_vowels)
+#             ])
+#             if not hyphen_used:
+#                 if c > 1 and c+1 <= syllables_count:
+#                     hyphen_chance = random.random()
+#                     hyphen_probability = 0.2*syllables_count
+#                     if hyphen_chance < hyphen_probability:
+#                         syllables.append('-')
+#                         hyphen_used = True
+#             syllables.append(syllable)
+#         name = ''.join(syllables)
+#         if any(name.endswith(f'-{banned_name}') for banned_name in civ_banned_names) or any(name.startswith(f'{banned_name}-') for banned_name in civ_banned_names) or any(name == banned_name for banned_name in civ_banned_names):
+#             print(f"{name} is a banned name. Trying again...")
+#             continue
+#         else:
+#             break
+#     return name.capitalize()
+
+# @bot.command()
+# async def civ(ctx, *args):
+
+#     user_id = ctx.author.id
+
+#     # Initiate user in file
+#     with open('civ.json', 'r') as outfile:
+#         civ_file = json.load(outfile)
+
+#     if args:
+#         arg = args[0].lower()
+
+#         if arg == 'register':
+
+#             if str(user_id) in civ_file:
+
+#                 await ctx.send(f"{ctx.author.name}, you are already registered under the family name `{civ_file[str(user_id)]['info']['family name']}`!")
+#                 return
+            
+#             try:
+#                 family_name_registration = args[1]
+#             except:
+#                 await ctx.send(f"Expected `Familyname` argument is missing. Command is `{prefixes[0]}civ register Familyname`, where Familyname is the last name of your Civ family.\n\n**Naming rules:**\n- Must contain only alphabetical characters\n- No spaces or other special characters\n- Maximum length of 14 characters")
+#                 return
+            
+#             if not family_name_registration.isalpha():
+#                 await ctx.send(f"Familyname `{family_name_registration}` is not acceptable - only alphabetic characters are allowed.")
+#                 return
+            
+#             if len(family_name_registration) > 14:
+#                 await ctx.send(f"Familyname `{family_name_registration}` is not acceptable - 14 characters limit.")
+#                 return
+            
+#             await ctx.send(f"Your Civ family name will be `{family_name_registration.capitalize()}`. Are you sure?\n**Make sure to choose something you like - this cannot be changed once decided!**\n\nSay `confirm` to confirm.")
+
+#             def check(m):
+#                 return m.author == ctx.author and m.content.lower() == "confirm"
+
+#             try:
+#                 await bot.wait_for("message", check=check, timeout=10.0)
+#             except asyncio.TimeoutError:
+#                 await ctx.send("Command timed out. Operation cancelled.")
+#                 return
+
+#             civ_file[str(ctx.author.id)] = {
+#                 'info': {
+#                     'family name': family_name_registration.capitalize()
+#                     },
+#                 'civ': {
+
+#                 }
+#                 }
+
+#             with open('civ.json', 'w') as f:
+#                 json.dump(civ_file, f, indent=4)
+            
+#             await ctx.send(f"Your Civ family has been registered as `{family_name_registration.capitalize()}`! You may now spawn your Civ with `{prefixes[0]}civ spawn`.")
+        
+#         if str(ctx.author.id) not in civ_file:
+#             await ctx.send(f"Please register your Civ family using the command `{prefixes[0]}civ register Familyname`, where Familyname is the last name of your Civ family.\nMake sure to choose something you like - this cannot be changed once decided!")
+#             return
+        
+#         if arg == 'spawn':
+
+#             if civ_file[str(ctx.author.id)]['civ'].get('name'):
+#                 await ctx.send("You currently already have a Civ.")
+#                 return
+            
+#             civ_generated_name = civ_name_generator()
+#             civ_file[str(ctx.author.id)]['civ']['name'] = civ_generated_name
+#             civ_file[str(ctx.author.id)]['civ']['birthday'] = datetime.now().strftime("%m/%d/%Y")
+#             civ_file[str(ctx.author.id)]['civ']['skills'] = None
+#             civ_file[str(ctx.author.id)]['civ']['job'] = None
+#             civ_file[str(ctx.author.id)]['civ']['status'] = "Idle"
+
+#             with open('civ.json', 'w') as f:
+#                 json.dump(civ_file, f, indent=4)
+            
+#             await ctx.send(f"Your Civ has spawned! The Gods have granted them the name `{civ_generated_name}`. May `{civ_generated_name} {civ_file[str(ctx.author.id)]['info']['family name']}` live a long and fulfilling life!")
+        
+#     else:
+
+#         if str(ctx.author.id) not in civ_file:
+#             await ctx.send(f"Please register your Civ family using the command `{prefixes[0]}civ register Familyname`, where Familyname is the last name of your Civ family.\nMake sure to choose something you like - this cannot be changed once decided!")
+#             return
+
+#         embed = discord.Embed(title=f"{ctx.author.name} Civ ({civ_file[str(user_id)]['info']['family name']})", color=bot_color)
+
+#         if civ_file[str(user_id)]['civ'].get('name'):
+#             embed.add_field(
+#                 name="Name",
+#                 value=f"{civ_file[str(user_id)]['civ']['name']} {civ_file[str(user_id)]['info']['family name']}",
+#                 inline=False
+#             )
+
+#             birthday = datetime.strptime(civ_file[str(user_id)]['civ']['birthday'], '%m/%d/%Y')
+#             age = datetime.now()-birthday
+#             embed.add_field(
+#                 name="Spawnday (age)",
+#                 value=f"{civ_file[str(user_id)]['civ']['birthday']} ({age.days} moon cycles)",
+#                 inline=False
+#             )
+            
+#             if civ_file[str(user_id)]['civ']['skills']:
+#                 skills = [(f"{skill} ({info['lvl']})") for skill, info in civ_file[str(user_id)]['civ']['skills'].items()]
+#             else:
+#                 skills = ["None"]
+#             embed.add_field(
+#                 name="Skills",
+#                 value=', '.join(skills),
+#                 inline=False
+#             )
+
+#             embed.add_field(
+#                 name="Job",
+#                 value=civ_file[str(user_id)]['civ']['job'],
+#                 inline=False
+#             )
+
+#             embed.add_field(
+#                 name="Status",
+#                 value=civ_file[str(user_id)]['civ']['status'],
+#                 inline=False
+#             )
+        
+#         else:
+#             embed.add_field(
+#                 name=f"You currently do not have a Civ.",
+#                 value=f"You may spawn a Civ with `{prefixes[0]}civ spawn`",
+#                 inline=False
+#             )
+
+#         await ctx.send(embed=embed)
+
+@bot.command(aliases=[ 'bm' ])
+async def bookmark(ctx):
+
+    if not ctx.guild:
+        await ctx.send("The `bookmark` commands cannot be executed from Direct Messages.")
+        return
+
+    if not ctx.message.reference:
+        ctx.send("No reference message was received. Did you forgot to reply to the message you wish to bookmark?")
+        return
+    
+    try:
+        replied = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+    except discord.NotFound:
+        ctx.send("The specified message was not found.")
+    except discord.Forbidden:
+        ctx.send("You do not have the permissions required to fetch the message.")
+    except discord.HTTPException as e:
+        ctx.send(f"Retrieving the message failed: {e}")
+
+    if replied.embeds:
+        fields = [f"{field.name}\n{field.value}\n\n" for field in replied.embeds[0].fields]
+        content = f"**{replied.embeds[0].title}**\n*{replied.embeds[0].description}*\n\n{''.join(fields)}"
+        title = f"{replied.embeds[0].title[:40]}{'...' if len(replied.embeds[0].title) > 40 else ''}{' (Embed)' if replied.embeds else ''}"
+    else:
+        content = replied.content
+        title = f"{replied.content[:40]}{'...' if len(replied.content) > 40 else ''}"
+
+    link = f"https://discord.com/channels/{ctx.guild.id}/{ctx.channel.id}/{replied.id}"
+
+    embed = discord.Embed(
+        title=f"Bookmark - {title}",
+        description=f"#{replied.channel.name}",
+        url=link
+    )
+
+    embed.add_field(
+        name="Author",
+        value=replied.author.name,
+        inline=False
+    )
+
+    embed.add_field(
+        name=f"Message{' (Embed)' if replied.embeds else ''}",
+        value=f"----------\n{content[:1000]}{'...' if len(content) > 1000 else ''}",
+        inline=False
+    )
+
+    await ctx.author.send(embed=embed)
+    await ctx.send(f"{ctx.author.name} I've sent you a bookmark DM for the following message!\n`{title}`\n{link}")
+
 # HELP COMMANDS
 
 @bot.command()
@@ -5104,7 +5322,10 @@ async def help(ctx, query=None):
          "Lists user's reminders."),
 
         ("mine (aliases: `m`) `shop` `buy` `sell` `market` `ascend` `stats`",
-         f"Play the mining idle game. Non-argument displays your mine's information. See See `mineguide` (`{prefixes[0]}mineguide`) for details.")
+         f"Play the mining idle game. Non-argument displays your mine's information. See See `mineguide` (`{prefixes[0]}mineguide`) for details."),
+
+        ("bookmark (aliases: `bm`)",
+         f"Have {botname} DM you a bookmark for the desired message in the server. Reply to a message with this command to bookmark the reply.")
     ]
 
     mod_commands_list = [
