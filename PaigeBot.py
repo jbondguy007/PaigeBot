@@ -4542,7 +4542,10 @@ New Balance:        |   $ {mine_data[str(ctx.author.id)]['assets']['money']:,.2f
                 }
             }
             for key in crew_values:
-                mine_data[str(ctx.author.id)]['crew'][key]['count'] = 0
+                mine_data[str(ctx.author.id)]['crew'][key] = {
+                    'count': 0,
+                    'upgraded': 1.0
+                }
 
             mine_data[str(ctx.author.id)]['multi']['ascension'] = ascension_bonus
 
@@ -4582,7 +4585,10 @@ But there is not time ponder. No time to lose. It's time to start over. To get t
                         "mine_ascension_10k",
                         "mine_ascension_25k",
                         "mine_ascension_100k",
-                        "mine_ascension_500k"
+                        "mine_ascension_500k",
+                        "mine_ascension_1m",
+                        "mine_ascension_10m",
+                        "mine_ascension_100m"
                     ]
                 )
             
@@ -4603,7 +4609,8 @@ But there is not time ponder. No time to lose. It's time to start over. To get t
                     "mine_gems_mined_10m",
                     "mine_gems_mined_100m",
                     "mine_gems_mined_1b",
-                    "mine_gems_mined_1t"
+                    "mine_gems_mined_1t",
+                    "mine_gems_mined_1qa"
                 ]
             )
             await achievement(
@@ -5099,7 +5106,7 @@ async def mine_process():
         for userID, data in mine_data.items():
             earnings = []
             for crew, crew_info in data['crew'].items():
-                earnings.append(crew_info['count']*crew_values[crew]['production'])
+                earnings.append((crew_info['count']*crew_values[crew]['production'])*crew_info['upgraded'])
         
             earnings = round( sum(earnings) )
 
