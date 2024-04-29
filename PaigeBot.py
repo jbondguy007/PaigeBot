@@ -3946,6 +3946,59 @@ async def reminders(ctx):
 
     await ctx.send(content=msg)
 
+# crew_values = {
+#     'miner': {
+#         'abbreviation': 'mi',
+#         'cost': 10,
+#         'production': 1
+#     },
+#     'jackhammer': {
+#         'abbreviation': 'jh',
+#         'cost': 110,
+#         'production': 8
+#     },
+#     'drill': {
+#         'abbreviation': 'dr',
+#         'cost': 1200,
+#         'production': 48
+#     },
+#     'excavator': {
+#         'abbreviation': 'ex',
+#         'cost': 13000,
+#         'production': 270
+#     },
+#     'jumbo drill': {
+#         'abbreviation': 'jdr',
+#         'cost': 140000,
+#         'production': 1425
+#     },
+#     'jumbo excavator': {
+#         'abbreviation': 'jex',
+#         'cost': 2000000,
+#         'production': 8000
+#     },
+#     'mine': {
+#         'abbreviation': 'mine',
+#         'cost': 33000000,
+#         'production': 45000
+#     },
+#     'mining town': {
+#         'abbreviation': 'mt',
+#         'cost': 450000000,
+#         'production': 240000
+#     },
+#     'space mining crew': {
+#         'abbreviation': 'smc',
+#         'cost': 6000000000,
+#         'production': 1300000
+#     },
+#     'interplanetary mining company': {
+#         'abbreviation': 'ipmc',
+#         'cost': 75000000000,
+#         'production': 8000000
+#     }
+# }
+
 crew_values = {
     'miner': {
         'abbreviation': 'mi',
@@ -3954,51 +4007,75 @@ crew_values = {
     },
     'jackhammer': {
         'abbreviation': 'jh',
-        'cost': 110,
+        'cost': 120,
         'production': 8
     },
     'drill': {
         'abbreviation': 'dr',
         'cost': 1200,
-        'production': 48
+        'production': 50
     },
     'excavator': {
         'abbreviation': 'ex',
-        'cost': 13000,
-        'production': 270
+        'cost': 13500,
+        'production': 280
     },
     'jumbo drill': {
         'abbreviation': 'jdr',
-        'cost': 140000,
-        'production': 1425
+        'cost': 145000,
+        'production': 1500
     },
     'jumbo excavator': {
         'abbreviation': 'jex',
-        'cost': 2000000,
+        'cost': 1625000,
         'production': 8000
     },
     'mine': {
         'abbreviation': 'mine',
-        'cost': 33000000,
-        'production': 45000
+        'cost': 30000000,
+        'production': 44750
     },
     'mining town': {
         'abbreviation': 'mt',
-        'cost': 450000000,
-        'production': 240000
+        'cost': 260000000,
+        'production': 252500
     },
     'space mining crew': {
         'abbreviation': 'smc',
-        'cost': 6000000000,
-        'production': 1300000
+        'cost': 3450000000,
+        'production': 1400000
     },
     'interplanetary mining company': {
         'abbreviation': 'ipmc',
-        'cost': 75000000000,
+        'cost': 49500000000,
         'production': 8000000
+    },
+    'warp drive mining fleet': {
+        'abbreviation': 'wdmf',
+        'cost': 725000000000,
+        'production': 45000000
+    },
+    'galactic mining company': {
+        'abbreviation': 'gmc',
+        'cost': 11000000000000,
+        'production': 250000000
+    },
+    'alien assault command': {
+        'abbreviation': 'aac',
+        'cost': 167500000000000,
+        'production': 1350000000
+    },
+    'intergalactical mining company': {
+        'abbreviation': 'igmc',
+        'cost': 2650000000000000,
+        'production': 7400000000
+    },
+    'intergalactical war force': {
+        'abbreviation': 'igwf',
+        'cost': 45500000000000000,
+        'production': 40000000000
     }
 }
-
 
 with open('permanent_variables.json', 'r') as outfile:
     persistent_data = json.load(outfile)
@@ -4048,7 +4125,10 @@ async def mine(ctx, *args):
             }
         }
         for key in crew_values:
-            mine_file[str(ctx.author.id)]['crew'][key] = 0
+            mine_file[str(ctx.author.id)]['crew'][key] = {
+                'count': 0,
+                'upgraded': 1.0
+            }
 
         with open('mine.json', 'w') as f:
             json.dump(mine_file, f, indent=4)
@@ -4057,7 +4137,7 @@ async def mine(ctx, *args):
 
         arg = args[0]
 
-        if arg.lower() == 'shop':
+        if arg.lower() in ['shop', 'store']:
 
             with open('mine.json', 'r') as outfile:
                 mine_data = json.load(outfile)
@@ -4068,11 +4148,12 @@ async def mine(ctx, *args):
 
             for crew, crew_info in crew_values.items():
 
-                cost = crew_info['cost']*(1.2**(mine_data[str(ctx.author.id)]['crew'][crew]))
-                max_buy = await mine_max_unit_afford_count(money=user_data['assets']['money'], crew_base_value=crew_info['cost'], crew_owned_count=user_data['crew'][crew])
+                cost = crew_info['cost']*(1.2**(mine_data[str(ctx.author.id)]['crew'][crew]['count']))
+                prod = crew_info['production']*user_data['crew'][crew]['upgraded']
+                max_buy = await mine_max_unit_afford_count(money=user_data['assets']['money'], crew_base_value=crew_info['cost'], crew_owned_count=user_data['crew'][crew]['count'])
                 embed.add_field(
                     name=f"{crew.title()} (`{crew_info['abbreviation']}`)",
-                    value=f"Cost: $ {cost:,.2f}{f' ({human_num(cost)})' if cost > 999.99 else ''}\nProduction: {crew_info['production']:,} 💎/min\nCan Afford: {f'{max_buy}' if max_buy else f'None ($ {human_num(cost-money)} more needed)'}",
+                    value=f"💵 Cost: `$ {f'{human_num(cost)}' if cost > 999.99 else f'{cost:,.2f}'}`\n💎 Production: `{f'{human_num(prod)}' if cost > 999.99 else f'{prod:,.2f}'}`{' (Upgraded)' if user_data['crew'][crew]['upgraded'] == 2.0 else ''}\n:shopping_cart: Can Afford: {f'`{max_buy}`' if max_buy else f'`None` ($ {human_num(cost-money)} more needed)'}",
                     inline=False
                 )
             
@@ -4106,7 +4187,7 @@ async def mine(ctx, *args):
                     continue
 
             user_money = user_data['assets']['money']
-            user_crew_count = user_data['crew'][what]
+            user_crew_count = user_data['crew'][what]['count']
             crew_base_value = crew_values[what]['cost']
 
             if count == "max":
@@ -4144,11 +4225,31 @@ async def mine(ctx, *args):
                     'interplanetary mining company': {
                         'title': "Planet Breacher",
                         'description': "You stand up from your lavish desk and walk up to the gigantic window of your top-floor office, revealing the gritty, yet satisfying view of your empire. After conquring the edges of space, you pursued riches within the rest of the solar system.\n\nIs this it? Have you reached the edge of the explorable universe? You shrug away the thought, and help yourself to an exorbitantly expensive whiskey from your spirits cabinet.\n\nThere's still work to do, you think to yourself, as you enjoy the burning sensation of a well-deserved treat run down your throat."
+                    },
+                    'warp drive mining fleet': {
+                        'title': "Fast Travel",
+                        'description': "A breakthrough in space exploration technology yields the ability to travel at extreme speeds through warp drives. The technology allows for mining and shipping crews to mine every corner of the galaxy."
+                    },
+                    'galactic mining company': {
+                        'title': "Across the Galaxy, and Beyond",
+                        'description': "With the development of warp drives, the galaxy is prime for exploration.\n\nVarious alien civilizations, systems, and most importantly, mining resources have been discovered through our galaxy. It's just waiting to be mined."
+                    },
+                    'alien assault command': {
+                        'title': "Star Wars",
+                        'description': "The first encounter with life outside our home planet was on friendly terms... until the fight for raw resources began. Mining companies must now send out squads of armed mercenaries to attack alien life who dare try to lay claim upon mining resources.\n\nInsolence towards the glorious mining empire of [REDACTED] will be met with deadly force."
+                    },
+                    'intergalactical mining company': {
+                        'title': "Universal Exploitation",
+                        'description': "As the faster-than-light travel technology improves, mining operations expand beyond the galaxy. No corner of the known universe remains untouched by the glorious hand of [REDACTED].\n\nWe are unstoppable."
+                    },
+                    'intergalactical war force': {
+                        'title': "The Ultimate Conflict",
+                        'description': "War. War never changes.\n\nThe neighboring nation of [REDACTED] waged war to gather slaves and wealth.\n[REDACTED] built an empire from its lust for gold and territory.\n[REDACTED] shaped a battered [REDACTED] into an economic superpower.\n\nOur war lays on the foundations of our economic superpowers - gems. If we must battle other races across the entire universe for the rest of times to maintain and grow our monopoly of the mining industry... then so be it.\n\nFor wealth.\nFor power.\n\nFor the glory of [REDACTED]."
                     }
                 }
 
                 try:
-                    if mine_data[str(ctx.author.id)]['crew'][what] == 0:
+                    if mine_data[str(ctx.author.id)]['crew'][what]['count'] == 0:
                         unit = units_intro[what]
                         file = discord.File(f"idlemine/images/units/{what.replace(' ', '_')}.png")
                         embed = discord.Embed(title=unit['title'], description=unit['description'])
@@ -4158,12 +4259,12 @@ async def mine(ctx, *args):
                     pass
 
                 mine_data[str(ctx.author.id)]['assets']['money'] -= cost
-                mine_data[str(ctx.author.id)]['crew'][what] += count
+                mine_data[str(ctx.author.id)]['crew'][what]['count'] += count
                 mine_data[str(ctx.author.id)]['global stats']['units bought'] += count
 
-                new_cost = crew_values[what]['cost'] * ( 1.2 ** ( mine_data[str(ctx.author.id)]['crew'][what] ) )
+                new_cost = crew_values[what]['cost'] * ( 1.2 ** ( mine_data[str(ctx.author.id)]['crew'][what]['count'] ) )
 
-                await ctx.send(f"{ctx.author.name} purchased {count} `{what}` for `{cost:,.2f}`. Unit price has increased to `$ {new_cost:,.2f}` per unit. Your funds are now `$ {mine_data[str(ctx.author.id)]['assets']['money']:,.2f}`.")
+                await ctx.send(f"{ctx.author.name} purchased {count} `{what}` for `{human_num(cost)}`. Unit price has increased to `$ {human_num(new_cost)}` per unit. Your funds are now `$ {human_num(mine_data[str(ctx.author.id)]['assets']['money'])}`.")
 
                 with open('mine.json', 'w') as f:
                     json.dump(mine_data, f, indent=4)
@@ -4189,9 +4290,72 @@ async def mine(ctx, *args):
                 )
 
             else:
-                await ctx.send(f"{ctx.author.name} cannot afford {count} `{what}` for `$ {cost:,.2f}`. Your funds: `$ {mine_data[str(ctx.author.id)]['assets']['money']:,.2f}`")
+                await ctx.send(f"{ctx.author.name} cannot afford {count} `{what}` for `$ {human_num(cost)}`. Your funds: `$ {human_num(mine_data[str(ctx.author.id)]['assets']['money'])}`")
             
             return
+        
+        elif arg.lower() == 'upgrade':
+
+            try:
+                what = args[1].lower()
+
+            except:
+                with open('mine.json', 'r') as outfile:
+                    mine_data = json.load(outfile)
+                user_data = mine_data[str(ctx.author.id)]
+                money = user_data['assets']['money']
+                embed = discord.Embed(title=f"{ctx.author.name}'s Mine Upgrades", description=f"Money: $ {money:,.2f}{f' ({human_num(money)})' if money > 999.99 else ''}", color=bot_color)
+
+                for crew, crew_info in crew_values.items():
+
+                    cost = crew_info['cost']*100
+
+                    if user_data['crew'][crew]['upgraded'] == 2.0:
+                        cost_message = "Already upgraded"
+                    else:
+                        cost_message = f"`$ {f'{human_num(cost)}' if cost > 999.99 else f'{cost:,.2f}'}`"
+
+                    embed.add_field(
+                        name=f"{crew.title()} (`{crew_info['abbreviation']}`)",
+                        value=f"{'✅' if cost_message == 'Already upgraded' else ':arrow_double_up:'} Cost: {cost_message}",
+                        inline=False
+                    )
+                
+                await ctx.send(embed=embed)
+                return
+            
+            with open('mine.json', 'r') as outfile:
+                mine_data = json.load(outfile)
+                user_data = mine_data[str(ctx.author.id)]
+
+            for crew, info in crew_values.items():
+                if what == info['abbreviation']:
+                    what = crew
+                    break
+                else:
+                    continue
+
+            if user_data['crew'][what]['upgraded'] == 2.0:
+                await ctx.send(f"{ctx.author.name}, `{what}` unit already upgraded.")
+                return
+
+            user_money = user_data['assets']['money']
+            crew_upgrade_cost = crew_values[what]['cost']*100
+
+            if crew_upgrade_cost <= user_money:
+                mine_data[str(ctx.author.id)]['assets']['money'] -= crew_upgrade_cost
+                mine_data[str(ctx.author.id)]['crew'][what]['upgraded'] = 2.0
+
+                await ctx.send(f"{ctx.author.name}, `{what}` unit upgraded! Production has doubled for this unit.")
+            
+                with open('mine.json', 'w') as f:
+                    json.dump(mine_data, f, indent=4)
+
+                return
+            
+            else:
+                await ctx.send(f"{ctx.author.name} cannot afford to upgrade `{what}` for `$ {human_num(crew_upgrade_cost)}`. Your funds: `$ {human_num(mine_data[str(ctx.author.id)]['assets']['money'])}`")
+                return
         
         elif arg.lower() == 'sell':
             with open('mine.json', 'r') as outfile:
@@ -4338,8 +4502,8 @@ New Balance:        |   $ {mine_data[str(ctx.author.id)]['assets']['money']:,.2f
             user_data = mine_data[str(ctx.author.id)]
             
             production = {}
-            for crew, crew_count in user_data['crew'].items():
-                production[crew] = (crew_count*crew_values[crew]['production'])
+            for crew, crew_info in user_data['crew'].items():
+                production[crew] = (crew_info['count']*crew_values[crew]['production'])
             total_production = sum(production.values())
 
             ascension_bonus = round(total_production/ascension_divider, 4)
@@ -4378,7 +4542,7 @@ New Balance:        |   $ {mine_data[str(ctx.author.id)]['assets']['money']:,.2f
                 }
             }
             for key in crew_values:
-                mine_data[str(ctx.author.id)]['crew'][key] = 0
+                mine_data[str(ctx.author.id)]['crew'][key]['count'] = 0
 
             mine_data[str(ctx.author.id)]['multi']['ascension'] = ascension_bonus
 
@@ -4515,8 +4679,8 @@ But there is not time ponder. No time to lose. It's time to start over. To get t
 
     gems_earnings = {}
 
-    for crew, crew_count in user_data['crew'].items():
-        gems_earnings[crew] = (crew_count*crew_values[crew]['production'])
+    for crew, crew_info in user_data['crew'].items():
+        gems_earnings[crew] = (crew_info['count']*crew_values[crew]['production'])*crew_info['upgraded']
 
     gems_earnings_total = round( sum( gems_earnings.values() ) )
     gems_possession = user_data['assets']['gems']
@@ -4545,10 +4709,10 @@ But there is not time ponder. No time to lose. It's time to start over. To get t
             inline=False
         )
     
-    for crew, count in user_data['crew'].items():
+    for crew, crew_info in user_data['crew'].items():
         embed.add_field(
-            name=f"{crew.title()} (+{crew_values[crew]['production']:,} 💎/min)",
-            value=f"{count:,} (+{gems_earnings[crew]:,}/min)",
+            name=f"{crew.title()} (+{human_num(crew_values[crew]['production'])} 💎/min{' x2 (upgraded)' if crew_info['upgraded'] == 2.0 else ''})",
+            value=f"{crew_info['count']:,} (+{human_num(gems_earnings[crew])}/min)",
             inline=False
         )
     
@@ -4587,6 +4751,11 @@ async def mineguide(ctx):
     embed2.add_field(
         name="buy `unit` `count`",
         value="Exchange money for the specified `unit` (see `shop` for details). Optional argument `count` to purchase in bulk must be an integer representing the number of units to purchase, or `max` to purchase the maximum number of units.",
+        inline=False
+    )
+    embed2.add_field(
+        name="upgrade `unit`",
+        value="Exchange money for the specified `unit` to upgrade. Upgrades cost 100x the base cost of the unit, and doubles this unit's production. Issuing the `upgrade` command without supplying a unit argument will display the available upgrades and upgrade costs.",
         inline=False
     )
     embed2.add_field(
@@ -4651,8 +4820,8 @@ class MineEvent():
             # Gems per minute function
             def gems_per_min_calc():
                 earnings = []
-                for crew, crew_count in info['crew'].items():
-                    earnings.append(crew_count*crew_values[crew]['production'])
+                for crew, crew_info in info['crew'].items():
+                    earnings.append(crew_info['count']*crew_values[crew]['production'])
             
                 earnings = round( sum(earnings) )
 
@@ -4708,7 +4877,7 @@ class MineEvent():
                 mine_data[user]['assets']['gems'] += self.event_value_change
             
             elif self.event_type == 'units':
-                mine_data[user]['crew'][self.event_unit_type] += self.event_value_change
+                mine_data[user]['crew'][self.event_unit_type]['count'] += self.event_value_change
 
             # Add this player to the list of players affected by the event
             affected_players.append(user)
@@ -4929,8 +5098,8 @@ async def mine_process():
     try:
         for userID, data in mine_data.items():
             earnings = []
-            for crew, crew_count in data['crew'].items():
-                earnings.append(crew_count*crew_values[crew]['production'])
+            for crew, crew_info in data['crew'].items():
+                earnings.append(crew_info['count']*crew_values[crew]['production'])
         
             earnings = round( sum(earnings) )
 
