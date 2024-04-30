@@ -62,6 +62,7 @@ general_channel = 1067986921487351826
 test_server_channel = 630835643953709066
 test_giveaway_notif_channel = 1079238616049537034
 miners_channel = 1206981787323211836
+notifications_squad_channel = 1234751398542049320
 
 # Roles
 
@@ -80,10 +81,20 @@ role_gamenight = 1142304222176608340
 role_paigebotchangelog = 1166421373447573595
 role_secretsanta = 1172277564597878854
 role_miners = 1207751182307561533
+role_allfreebies = 1234738656627920966
+role_steamfreebies = 1234756406846951484
+role_jackpotnotif = 1234763730487607317
 
 jbondguy007_userID = 172522306147581952
 
-allowed_roles = [role_gamenight, role_paigebotchangelog, role_miners]
+allowed_roles = {
+    'gamenight': role_gamenight,
+    'changelog': role_paigebotchangelog,
+    'miners': role_miners,
+    'allfreebies': role_allfreebies,
+    'steamfreebies': role_steamfreebies,
+    'slotsjackpots': role_jackpotnotif
+}
 
 # TODO IF TESTING: Set to arial.ttf
 
@@ -594,7 +605,7 @@ def chatbot(query, nickname):
         chat_completion = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             temperature=1.2,
-            max_tokens=260,
+            max_tokens=300,
             messages=msg
         )
 
@@ -1318,6 +1329,12 @@ def checkin_check(ctx, file='slots_checkin.json', cooldown=slots_cooldown):
 @bot.command()
 async def slots(ctx):
 
+    with open('slots_checkin.json', "r") as f:
+        slots_checkin = json.load(f)
+    
+    if str(ctx.author.id) not in slots_checkin.keys():
+        await ctx.send(f"<@{ctx.author.id}> Welcome to Paige's Slots!\n\nAs this is your first time playing, please keep these rules in mind:\n\n1. Prizes you win and accept must be activated to your own personal account only (unless agreed otherwise with the prize contributor).\n2. If you claim a prize, remember to say thanks to the contributor!\n3. Failing to follow the rules, or raising suspicion of exploiting the slots command may result in a slots command ban.\n\nThanks for reading - enjoy the crippling gambling addiction! :paigehappy:\n----------")
+
     if len(ctx.author.roles) <= 1 or not [role.id for role in ctx.author.roles if role.id not in allowed_roles]:
         await ctx.send("Hi, welcome to Paige's Casino! Unfortunately, we require a credit check (having a staff-assigned role) before you can enter. Contact staff for assistance. Thank you!")
         return
@@ -1399,9 +1416,17 @@ async def slots(ctx):
     remove_slot_prize(prize, feeds)
 
     await ctx.send(
-            f"<@{ctx.author.id}> has won... `{prize['title']}` key for `{prize['platform']}`! Please remember to thank <@{prize['user']}>!",
-            allowed_mentions=discord.AllowedMentions(users=False)
-        )
+        f"<@{ctx.author.id}> has won... `{prize['title']}` key for `{prize['platform']}`! Please remember to thank <@{prize['user']}>!",
+        allowed_mentions=discord.AllowedMentions(users=False)
+    )
+
+    cha = bot.get_channel(notifications_squad_channel)
+    msg_link = f"https://discord.com/channels/{ctx.guild.id}/{ctx.channel.id}/{ctx.message.id}"
+
+    await cha.send(
+        f"<@&{role_jackpotnotif}> {msg_link}\n<@{ctx.author.id}> has won `{prize['title']}` key for `{prize['platform']}` at slots!",
+        allowed_mentions=discord.AllowedMentions(users=False)
+    )
     
     statistics("Slots plays")
     
@@ -3303,30 +3328,20 @@ Any card can be holographic, regardless of rarity.
 @bot.command()
 async def role(ctx, role_query=None):
 
-    roles = await ctx.guild.fetch_roles()
+    allowed_roles_names = ', '.join( [ '`'+role+'`' for role in allowed_roles ] )
 
-    tagged_id = None
-    for role in roles:
-        if role.name == role_query or str(role.id) == role_query:
-            tagged_id = role.id
-            tagged_role = role
-            break
-
-    allowed_roles_names = ', '.join(['`'+role.name+'`' for role in roles if role.id in allowed_roles])
-
-    if not tagged_id:
-        await ctx.send(f"Role `{role_query}` not found. Must be one of: {allowed_roles_names} (or associated ID)")
+    if role_query not in allowed_roles.keys():
+        await ctx.send(f"Role `{role_query}` not found. Must be one of: {allowed_roles_names}")
         return
+    
+    role = ctx.guild.get_role(allowed_roles[role_query])
 
-    if tagged_id in allowed_roles:
-        if tagged_role not in ctx.author.roles:
-            await ctx.author.add_roles(role)
-            await ctx.send(f"Role `{role.name}` granted!")
-        else:
-            await ctx.author.remove_roles(role)
-            await ctx.send(f"Role `{role.name}` revoked!")
+    if role not in ctx.author.roles:
+        await ctx.author.add_roles(role)
+        await ctx.send(f"Role `{role.name}` granted!")
     else:
-        await ctx.send(f"Role `{role.name}` is not an authorized self-role. Must be one of: {allowed_roles_names} (or associated ID)")
+        await ctx.author.remove_roles(role)
+        await ctx.send(f"Role `{role.name}` revoked!")
 
 @bot.command()
 async def bug(ctx, *report):
@@ -4294,7 +4309,7 @@ async def mine(ctx, *args):
             
             return
         
-        elif arg.lower() == 'upgrade':
+        elif arg.lower() in ['upgrade', 'upgrades']:
 
             try:
                 what = args[1].lower()
@@ -4304,7 +4319,7 @@ async def mine(ctx, *args):
                     mine_data = json.load(outfile)
                 user_data = mine_data[str(ctx.author.id)]
                 money = user_data['assets']['money']
-                embed = discord.Embed(title=f"{ctx.author.name}'s Mine Upgrades", description=f"Money: $ {money:,.2f}{f' ({human_num(money)})' if money > 999.99 else ''}", color=bot_color)
+                embed = discord.Embed(title=f"{ctx.author.name}'s Mine Upgrades", description=f"Money: $ {money:,.2f}{f' ({human_num(money)})' if money > 999.99 else ''}\n\n✅ - Upgraded\n:arrow_double_up: - Can upgrade\n:no_entry_sign: - Can't afford", color=bot_color)
 
                 for crew, crew_info in crew_values.items():
 
@@ -4317,7 +4332,7 @@ async def mine(ctx, *args):
 
                     embed.add_field(
                         name=f"{crew.title()} (`{crew_info['abbreviation']}`)",
-                        value=f"{'✅' if cost_message == 'Already upgraded' else ':arrow_double_up:'} Cost: {cost_message}",
+                        value=f"{'✅' if cost_message == 'Already upgraded' else (':no_entry_sign:' if cost > money else ':arrow_double_up:')} Cost: {cost_message}{f' (`$ {human_num(cost-money)}` more needed)' if cost > money else ''}",
                         inline=False
                     )
                 
@@ -4427,7 +4442,8 @@ New Balance:        |   $ {mine_data[str(ctx.author.id)]['assets']['money']:,.2f
                     "mine_gems_mined_10m",
                     "mine_gems_mined_100m",
                     "mine_gems_mined_1b",
-                    "mine_gems_mined_1t"
+                    "mine_gems_mined_1t",
+                    "mine_gems_mined_1qa"
                 ]
             )
             await achievement(
@@ -5457,8 +5473,8 @@ async def help(ctx, query=None):
         ("tc `arguments`",
          f"No argument: Claims a trading card. Has a cooldown time of {tc_cooldown}. See `tcguide` (`{prefixes[0]}tcguide`) for more."),
 
-        ("role `\"role name\"`",
-         "Grants the user the role `\"Role Name\"`, if it is an authorized self-role. Revokes the role if the user already has it."),
+        ("role `simpleroleID`",
+         f"Grants the user the role associated with `simpleroleID`. Revokes the role if the user already has it. `simpleroleID` must be one of {', '.join(allowed_roles)}."),
 
         ("bug `message`",
          f"Logs a bug report. Please include details as `message` - example: `{prefixes[0]}bug The trading card guide has a typo in the rarity sections.`"),
