@@ -4519,7 +4519,7 @@ New Balance:        |   $ {mine_data[str(ctx.author.id)]['assets']['money']:,.2f
             
             production = {}
             for crew, crew_info in user_data['crew'].items():
-                production[crew] = (crew_info['count']*crew_values[crew]['production'])
+                production[crew] = (crew_info['count']*crew_values[crew]['production'])*crew_info['upgraded']
             total_production = sum(production.values())
 
             ascension_bonus = round(total_production/ascension_divider, 4)
@@ -4721,9 +4721,11 @@ But there is not time ponder. No time to lose. It's time to start over. To get t
             inline=False
         )
     
+    ascension = round(user_data['multi']['ascension'], 4)
+
     embed.add_field(
         name="Ascension Bonus 📈",
-        value=f"{round(user_data['multi']['ascension'], 4)}% money earned on gems sales"
+        value=f"{ascension:,}%{f' ('+human_num(ascension)+')' if ascension > 999.99 else ''} money earned on gems sales"
     )
     
     embed.add_field(
