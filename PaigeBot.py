@@ -84,6 +84,7 @@ role_miners = 1207751182307561533
 role_allfreebies = 1234738656627920966
 role_steamfreebies = 1234756406846951484
 role_jackpotnotif = 1234763730487607317
+role_verified = 1235363990943567892
 
 jbondguy007_userID = 172522306147581952
 
@@ -5745,6 +5746,31 @@ async def maintenance(ctx, arg='start'):
         await ctx.send(f"Unrecognized argument `{arg}`.")
 
     await ctx.send(f"Maintenance `{arg}` notification sent out!")
+
+@bot.command()
+@commands.has_any_role(role_staff)
+async def verify(ctx):
+
+    SGM_guild = bot.get_guild(1067986921021788260)
+    server_members = SGM_guild.members
+    verified_role = ctx.guild.get_role(role_verified)
+
+    verified_count = 0
+    verified_failed = [ctx.author]
+
+    msg = await ctx.send(f"Granting the `Verified` role to all members!\n{verified_count}/{len(server_members)}")
+
+    for member in server_members:
+        try:
+            await member.add_roles(verified_role)
+        except:
+            verified_failed.append(member)
+        verified_count += 1
+        await msg.edit(content=f"Granting the `Verified` role to all members!\n{verified_count}/{len(server_members)}")
+    
+    await ctx.send(f"Task completed with `{len(verified_failed)}` error(s)!")
+    if verified_failed:
+        await ctx.send(f"The following users were not granted the role due to error(s):\n`{', '.join( [user.name for user in verified_failed] )}`")
 
 # CONTRIBUTOR COMMANDS
 
