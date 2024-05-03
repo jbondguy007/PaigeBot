@@ -5393,6 +5393,84 @@ async def bookmark(ctx):
     await ctx.author.send(embed=embed)
     await ctx.send(f"{ctx.author.name} I've sent you a bookmark DM for the following message!\n`{title}`\n{link}")
 
+prevent_gtf_command = False
+
+@bot.command()
+async def gtf(ctx):
+    if isinstance(ctx.channel, discord.DMChannel):
+        await ctx.send("Guess The Flag rounds may not be started in DMs!")
+        return
+    
+    global prevent_gtf_command
+    if prevent_gtf_command:
+        await ctx.send(f"<@{ctx.author.id}> a Guess The Flag round is already ongoing!")
+        return
+
+    prevent_gtf_command = True
+
+    gtf_start_timer = 20
+
+    url = 'https://www.worldometers.info/geography/flags-of-the-world/'
+    r = requests.get(url)
+    page = bs(r.content, "html.parser")
+    items = page.find_all("div", {"class": "col-md-4"})
+
+    item = random.choice(items)
+
+    country = item.text
+
+    image = item.find("a").get("href")
+    image_url = "https://www.worldometers.info"+image
+
+    unix_timestamp = int(time.mktime((datetime.now()+timedelta(seconds=gtf_start_timer)).timetuple()))
+    embed = discord.Embed(title="Guess The Flag!", description=f"Guessing times out <t:{unix_timestamp}:R>!")
+    embed.set_image(url=image_url)
+
+    embed_message = await ctx.send(embed=embed)
+
+    def check(m):
+        return m.author != bot.user and m.channel == ctx.channel
+
+    time_started = datetime.now()
+    gtf_timer = gtf_start_timer
+    message = None
+
+    while True:
+
+        try:
+            message = await bot.wait_for('message', check=check, timeout=gtf_timer)
+            if message.content.lower() == country.lower():
+                break
+            else:
+                message = None
+
+            now = datetime.now()
+
+            time_elapsed = now-time_started
+            time_elapsed = timedelta(seconds=time_elapsed.seconds)
+
+            timer_deltatime = timedelta(seconds=gtf_start_timer) # 20
+
+            gtf_timer = timer_deltatime-time_elapsed
+            gtf_timer = gtf_timer.seconds
+
+        except asyncio.TimeoutError:
+            break
+
+        continue
+    
+    if message:
+        await ctx.send(f"{message.author.name} is correct! This is a flag of `{country}`!")
+    else:
+        await ctx.send(f"No guesses? Too bad! This was the flag of... `{country}`!")
+
+    new_embed = discord.Embed(title="Guess The Flag!", description=f"Round ended! The answer was `{country}`!")
+    new_embed.set_image(url='https://i.imgur.com/tEsOtAl.png')
+
+    await embed_message.edit(embed=new_embed)
+    
+    prevent_gtf_command = False
+
 # HELP COMMANDS
 
 @bot.command()
