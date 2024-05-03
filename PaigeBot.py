@@ -760,10 +760,11 @@ async def on_connect():
 
 @bot.event
 async def on_command_error(ctx, error):
-    global prevent_binder_command, prevent_gtp_command, prevent_mine_command
+    global prevent_binder_command, prevent_gtp_command, prevent_mine_command, prevent_gtf_command
     prevent_binder_command = False
     prevent_gtp_command = False
     prevent_mine_command = False
+    prevent_gtf_command = False
     print(f"ERROR: {str(error)}")
     traceback.print_exception(type(error), error, error.__traceback__)
     await ctx.send(f"<:warning:1077420799713087559> Failure to process:\n`{str(error)}`")
