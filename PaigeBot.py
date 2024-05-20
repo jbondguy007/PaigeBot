@@ -5615,103 +5615,103 @@ async def generate_typerace_paragraph():
 
 prevent_tr_command = False
 
-@bot.command(aliases=[ 'tr' ])
-async def typerace(ctx, timer=120):
+# @bot.command(aliases=[ 'tr' ])
+# async def typerace(ctx, timer=120):
 
-    global prevent_tr_command
+#     global prevent_tr_command
 
-    if prevent_tr_command:
-        await ctx.send(f"<@{ctx.author.id}> a round of Type Racer is already ongoing!")
-        return
+#     if prevent_tr_command:
+#         await ctx.send(f"<@{ctx.author.id}> a round of Type Racer is already ongoing!")
+#         return
 
-    try:
-        typeracer_timer = int(timer)
-        if not 30 <= typeracer_timer <= 240:
-            raise Exception("`timer` argument must be an integer representing seconds, and must be no less than `30` and no more than `240`.")
-    except Exception as e:
-        await ctx.send(f"Error: {e}")
-        return
+#     try:
+#         typeracer_timer = int(timer)
+#         if not 30 <= typeracer_timer <= 240:
+#             raise Exception("`timer` argument must be an integer representing seconds, and must be no less than `30` and no more than `240`.")
+#     except Exception as e:
+#         await ctx.send(f"Error: {e}")
+#         return
 
-    def check(m):
-        return m.author != bot.user and m.channel == ctx.channel
+#     def check(m):
+#         return m.author != bot.user and m.channel == ctx.channel
     
-    prevent_tr_command = True
+#     prevent_tr_command = True
 
-    await ctx.send("Starting a Type Racer round...")
+#     await ctx.send("Starting a Type Racer round...")
 
-    paragraph = await generate_typerace_paragraph()
-    tokenized_paragraph = paragraph.split(' ')
-    file = discord.File('typeracer_prompt.png')
-    unix_timestamp = int(time.mktime((datetime.now()+timedelta(seconds=5)).timetuple()))
+#     paragraph = await generate_typerace_paragraph()
+#     tokenized_paragraph = paragraph.split(' ')
+#     file = discord.File('typeracer_prompt.png')
+#     unix_timestamp = int(time.mktime((datetime.now()+timedelta(seconds=5)).timetuple()))
 
-    countdown = await ctx.send(f"Get ready to type... <t:{unix_timestamp}:R>")
+#     countdown = await ctx.send(f"Get ready to type... <t:{unix_timestamp}:R>")
 
-    await asyncio.sleep(4)
-    round_end_timer = int(time.mktime((datetime.now()+timedelta(seconds=typeracer_timer)).timetuple()))
+#     await asyncio.sleep(4)
+#     round_end_timer = int(time.mktime((datetime.now()+timedelta(seconds=typeracer_timer)).timetuple()))
 
-    await countdown.edit(content=f"Start! Round ends <t:{round_end_timer}:R>.")
-    await ctx.send(file=file)
+#     await countdown.edit(content=f"Start! Round ends <t:{round_end_timer}:R>.")
+#     await ctx.send(file=file)
 
-    characters_count = len(paragraph)
-    gross_entries = characters_count/5
+#     characters_count = len(paragraph)
+#     gross_entries = characters_count/5
 
-    time_started = datetime.now()
-    now = datetime.now()
+#     time_started = datetime.now()
+#     now = datetime.now()
 
-    while True:
+#     while True:
 
-        try:
-            message = await bot.wait_for('message', check=check, timeout=typeracer_timer)
+#         try:
+#             message = await bot.wait_for('message', check=check, timeout=typeracer_timer)
 
-            tokenized_message = message.content.split(' ')
-            d = difflib.Differ()
-            diff = list(d.compare(tokenized_paragraph, tokenized_message))
-            mistakes = '\n'.join([word for word in diff if word.startswith('- ') or word.startswith('+ ')])
+#             tokenized_message = message.content.split(' ')
+#             d = difflib.Differ()
+#             diff = list(d.compare(tokenized_paragraph, tokenized_message))
+#             mistakes = '\n'.join([word for word in diff if word.startswith('- ') or word.startswith('+ ')])
 
-            if len(mistakes)/4 > len(tokenized_paragraph):
-                continue
+#             if len(mistakes)/4 > len(tokenized_paragraph):
+#                 continue
 
-            now = datetime.now()
-            complete_time = now - time_started
-            c_seconds = complete_time.total_seconds()
-            c_minutes = c_seconds / 60.0
+#             now = datetime.now()
+#             complete_time = now - time_started
+#             c_seconds = complete_time.total_seconds()
+#             c_minutes = c_seconds / 60.0
 
-            gross_wpm = gross_entries/c_minutes
-            error_rate = (len(mistakes)/2)/c_minutes
-            net_wpm = gross_wpm-error_rate
+#             gross_wpm = gross_entries/c_minutes
+#             error_rate = (len(mistakes)/2)/c_minutes
+#             net_wpm = gross_wpm-error_rate
 
-            if mistakes:
-                mistakes_text = f"You\'ve made the following mistakes:\n```diff\n{mistakes}\n```"
-            else:
-                mistakes_text = ''
+#             if mistakes:
+#                 mistakes_text = f"You\'ve made the following mistakes:\n```diff\n{mistakes}\n```"
+#             else:
+#                 mistakes_text = ''
 
-            await ctx.send(f"""
-<@{message.author.id}> has completed the challenge in `{complete_time.seconds}s:{complete_time.microseconds}ms`!
-Your WPM is `{gross_wpm:.2f}`.{f' Your Net WPM (with mistakes penalties) is `{net_wpm:.2f}`.' if mistakes else ''}
-{mistakes_text}
-""")
+#             await ctx.send(f"""
+# <@{message.author.id}> has completed the challenge in `{complete_time.seconds}s:{complete_time.microseconds}ms`!
+# Your WPM is `{gross_wpm:.2f}`.{f' Your Net WPM (with mistakes penalties) is `{net_wpm:.2f}`.' if mistakes else ''}
+# {mistakes_text}
+# """)
             
-            await message.delete()
+#             await message.delete()
 
-            now = datetime.now()
+#             # now = datetime.now()
 
-            time_elapsed = now-time_started
-            time_elapsed = timedelta(seconds=time_elapsed.seconds)
+#             # time_elapsed = now-time_started
+#             # time_elapsed = timedelta(seconds=time_elapsed.seconds)
 
-            timer_deltatime = timedelta(seconds=typeracer_timer)
+#             # timer_deltatime = timedelta(seconds=typeracer_timer)
 
-            typeracer_timer = timer_deltatime-time_elapsed
-            typeracer_timer = typeracer_timer.seconds
+#             # typeracer_timer = timer_deltatime-time_elapsed
+#             # typeracer_timer = typeracer_timer.seconds
 
-        except asyncio.TimeoutError:
-            break
+#         except asyncio.TimeoutError:
+#             break
 
-        continue
+#         continue
     
-    await ctx.send("Type Racer round is over!")
-    await countdown.edit(content="Round over!")
+#     await ctx.send("Type Racer round is over!")
+#     await countdown.edit(content="Round over!")
 
-    prevent_tr_command = False
+#     prevent_tr_command = False
 
 # HELP COMMANDS
 
@@ -5847,7 +5847,7 @@ async def help(ctx, query=None):
         ("bookmark (aliases: `bm`)",
          f"Have {botname} DM you a bookmark for the desired message in the server. Reply to a message with this command to bookmark the reply."),
 
-        ("typerace (aliases: `tr`)",
+        ("typerace (aliases: `tr`) | WIP: DISABLED",
          "Begin a Type Racer chat game! Test your typing speed and accuracy by typing out the generated paragraph.")
     ]
 
