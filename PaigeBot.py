@@ -15,6 +15,8 @@ import boto3
 import traceback
 import validators
 import urllib.parse
+import textwrap
+import difflib
 # import country_converter as coco
 
 from datetime import date, datetime, timedelta
@@ -85,6 +87,7 @@ role_allfreebies = 1234738656627920966
 role_steamfreebies = 1234756406846951484
 role_jackpotnotif = 1234763730487607317
 role_verified = 1235363990943567892
+role_streamviewer = 1236718569648291851
 
 jbondguy007_userID = 172522306147581952
 
@@ -94,7 +97,8 @@ allowed_roles = {
     'miners': role_miners,
     'allfreebies': role_allfreebies,
     'steamfreebies': role_steamfreebies,
-    'slotsjackpots': role_jackpotnotif
+    'slotsjackpots': role_jackpotnotif,
+    'livestreams': role_streamviewer
 }
 
 # TODO IF TESTING: Set to arial.ttf
@@ -244,6 +248,14 @@ class Buttons(discord.ui.View):
             ]
         )
 
+        cha = bot.get_channel(notifications_squad_channel)
+        msg_link = f"https://discord.com/channels/{self.outer_ctx.guild.id}/{self.outer_ctx.channel.id}/{self.outer_ctx.message.id}"
+
+        await cha.send(
+            f"<@&{role_jackpotnotif}> {msg_link}\n<@{self.outer_ctx.author.id}> has won and claimed `{self.prize['title']}` key for `{self.prize['platform']}` at slots!",
+            allowed_mentions=discord.AllowedMentions(users=False)
+        )
+
     @discord.ui.button(label="Redistribute", style=discord.ButtonStyle.red, custom_id="redistribute")
     async def redist(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.button_pressed = True  # Set the flag to True to indicate button press
@@ -270,6 +282,14 @@ class Buttons(discord.ui.View):
                 'slots_reject_count_25',
                 'slots_reject_count_50'
             ]
+        )
+
+        cha = bot.get_channel(notifications_squad_channel)
+        msg_link = f"https://discord.com/channels/{self.outer_ctx.guild.id}/{self.outer_ctx.channel.id}/{self.outer_ctx.message.id}"
+
+        await cha.send(
+            f"<@&{role_jackpotnotif}> {msg_link}\n<@{self.outer_ctx.author.id}> has won, but rejected `{self.prize['title']}` key for `{self.prize['platform']}` at slots!",
+            allowed_mentions=discord.AllowedMentions(users=False)
         )
 
     @tasks.loop(seconds=1)  # Check every 1 second
@@ -760,11 +780,12 @@ async def on_connect():
 
 @bot.event
 async def on_command_error(ctx, error):
-    global prevent_binder_command, prevent_gtp_command, prevent_mine_command, prevent_gtf_command
+    global prevent_binder_command, prevent_gtp_command, prevent_mine_command, prevent_gtf_command, prevent_tr_command
     prevent_binder_command = False
     prevent_gtp_command = False
     prevent_mine_command = False
     prevent_gtf_command = False
+    prevent_tr_command = False
     print(f"ERROR: {str(error)}")
     traceback.print_exception(type(error), error, error.__traceback__)
     await ctx.send(f"<:warning:1077420799713087559> Failure to process:\n`{str(error)}`")
@@ -777,7 +798,7 @@ async def on_message(message):
     
     if message.author == bot.user:
         return
-    if bot.user.id == 823385752486412290 and message.author.id not in [jbondguy007_userID, 479319946153689098, 279368230777126912, 391705444042670080, 319190839026909184]:
+    if bot.user.id == 823385752486412290 and message.author.id not in [jbondguy007_userID, 479319946153689098, 279368230777126912, 391705444042670080, 319190839026909184, 418868712846917632]:
         return
     
     print(f"{message.created_at} | #{message.channel} | @{message.author} | {message.content}\n")
@@ -1421,14 +1442,6 @@ async def slots(ctx):
         f"<@{ctx.author.id}> has won... `{prize['title']}` key for `{prize['platform']}`! Please remember to thank <@{prize['user']}>!",
         allowed_mentions=discord.AllowedMentions(users=False)
     )
-
-    cha = bot.get_channel(notifications_squad_channel)
-    msg_link = f"https://discord.com/channels/{ctx.guild.id}/{ctx.channel.id}/{ctx.message.id}"
-
-    await cha.send(
-        f"<@&{role_jackpotnotif}> {msg_link}\n<@{ctx.author.id}> has won `{prize['title']}` key for `{prize['platform']}` at slots!",
-        allowed_mentions=discord.AllowedMentions(users=False)
-    )
     
     statistics("Slots plays")
     
@@ -1507,9 +1520,9 @@ async def slotskey(ctx, *, args:commands.clean_content(fix_channel_mentions=Fals
     with open("slots_prizes.json", "w") as f:
         json.dump(feeds, f, indent=4)
 
-    channel = bot.get_channel(bot_channel)
+    channel = bot.get_channel(notifications_squad_channel)
 
-    await channel.send(f"New prize `{output['title']}` has been added to the slots prizes pool! Check `{prefixes[0]}slotsprizes` for details!")
+    await channel.send(f"New prize `{output['title']}` contribued by `{channel.guild.get_member(output['user']).display_name}` has been added to the slots prizes pool! Issue the command `{prefixes[0]}slotsprizes` in #{bot_channel} for details!")
 
     await ctx.send("Key added to prize pool! Thanks for your contribution!")
 
@@ -3650,19 +3663,29 @@ In an effort to ensure everyone has a good time, please abide to some general gu
 
 @bot.command()
 async def stats(ctx):
-    embed = discord.Embed(title="PaigeBot and Misc Statistics", description="A collection of PaigeBot and miscellaneous server-wide statistics.", color=bot_color)
 
     with open("statistics.json") as feedsjson:
         statistics = json.load(feedsjson)
 
-    for stat, count in statistics.items():
-        embed.add_field(
-            name=stat,
-            value=f"{count:,}",
+    embed1 = discord.Embed(title="PaigeBot and Misc Statistics", description="A collection of PaigeBot and miscellaneous server-wide statistics.", color=bot_color)
+    embed2 = discord.Embed(title="", description="", color=bot_color)
+
+    for name, value in list(statistics.items())[:25]:
+        embed1.add_field(
+            name=name,
+            value=f"{value:,}",
             inline=False
         )
     
-    await ctx.send(embed=embed)
+    for name, value in list(statistics.items())[25:]:
+        embed2.add_field(
+            name=name,
+            value=f"{value:,}",
+            inline=False
+        )
+    
+    await ctx.send(embed=embed1)
+    await ctx.send(embed=embed2)
 
 @bot.command(aliases=['tpir'])
 async def gtp(ctx):
@@ -5087,7 +5110,7 @@ async def mine_process():
             random_event = random.choice(mine_events)
             affected_players = random_event.process()
             if affected_players:
-                players_tags = [f'<@{user}>' for user in affected_players]
+                players_tags = [user.name for user in affected_players]
             else:
                 players_tags = ["Nobody"]
             random_greetings = [
@@ -5102,7 +5125,7 @@ async def mine_process():
                 "Good day loyal industry partners"
             ]
             greeting = random.choice(random_greetings)
-            await cha.send(f"<@&{role_miners}> **GOVERNMENT ALERT:**\n{greeting},\n\n{random_event.message}\n```diff\n{random_event.desc}\n```\n**APPLIES TO:** {' '.join([tag for tag in players_tags])}")
+            await cha.send(f"<@&{role_miners}> **GOVERNMENT ALERT:**\n{greeting},\n\n{random_event.message}\n```diff\n{random_event.desc}\n```\n**APPLIES TO:** {', '.join([tag for tag in players_tags])}")
         except:
             pass
     
@@ -5394,32 +5417,64 @@ async def bookmark(ctx):
     await ctx.author.send(embed=embed)
     await ctx.send(f"{ctx.author.name} I've sent you a bookmark DM for the following message!\n`{title}`\n{link}")
 
+    statistics("Bookmarks saved")
+
 prevent_gtf_command = False
 
+def get_gtf_flags():
+
+    items = None
+
+    while items is None:
+
+        try:
+            url = 'https://www.worldometers.info/geography/flags-of-the-world/'
+            r = requests.get(url)
+            page = bs(r.content, "html.parser")
+            items = page.find_all("div", {"class": "col-md-4"})
+
+        except:
+            pass
+    
+    return items
+
 @bot.command()
-async def gtf(ctx):
+async def gtf(ctx, arg=None):
+
     if isinstance(ctx.channel, discord.DMChannel):
         await ctx.send("Guess The Flag rounds may not be started in DMs!")
         return
     
     global prevent_gtf_command
-    if prevent_gtf_command:
-        await ctx.send(f"<@{ctx.author.id}> a Guess The Flag round is already ongoing!")
-        return
+    global cached_flag_items
+
+    if arg:
+        if arg.lower() == 'cache':
+            await ctx.send("Fetching and caching flags...")
+            try:
+                cached_flag_items = get_gtf_flags()
+                if not cached_flag_items:
+                    raise Exception("Caching flags failed.")
+                await ctx.send("Done!")
+                return
+            except Exception as e:
+                await ctx.send(f"Task failed: {e}")
+                return
+
+        if prevent_gtf_command:
+            await ctx.send(f"<@{ctx.author.id}> a Guess The Flag round is already ongoing!")
+            return
 
     prevent_gtf_command = True
 
     gtf_start_timer = 20
 
-    url = 'https://www.worldometers.info/geography/flags-of-the-world/'
-    r = requests.get(url)
-    page = bs(r.content, "html.parser")
-    items = page.find_all("div", {"class": "col-md-4"})
-
-    item = random.choice(items)
+    try:
+        item = random.choice(cached_flag_items)
+    except Exception as e:
+        raise Exception(f"Fetching a flag failed - {e}. Try issuing the command with the 'cache' argument to force caching.")
 
     country = item.text
-
     image = item.find("a").get("href")
     image_url = "https://www.worldometers.info"+image
 
@@ -5462,6 +5517,7 @@ async def gtf(ctx):
     
     if message:
         await ctx.send(f"{message.author.name} is correct! This is a flag of `{country}`!")
+        statistics("Guess The Flag correct guesses")
     else:
         await ctx.send(f"No guesses? Too bad! This was the flag of... `{country}`!")
 
@@ -5471,6 +5527,191 @@ async def gtf(ctx):
     await embed_message.edit(embed=new_embed)
     
     prevent_gtf_command = False
+
+    statistics("Guess The Flag rounds played")
+
+# reviews = {
+#     "Disco Elysium - The Final Cut": {"text": "packet", "design": "packet"},
+#     "Little Misfortune": {"text": "abubis", "design": "sleepy"},
+#     "Enter the Gungeon": {"text": "fernandopa", "design": "chocolate"},
+#     "Bastion": {"text": "chocolate", "design": "chocolate"},
+#     "Mail Time": {"text": "ape", "design": "sleepy"},
+#     "TOHU": {"text": "thexder", "design": "sleepy"},
+#     "Noxious Weeds": {"text": "chocolate", "design": "Vin"},
+#     "A Juggler's Tale": {"text": "chocolate", "design": "chocolate"},
+#     "Nine Witches: Family Disruption": {"text": "kal", "design": "chocolate"},
+#     "Gorogoa": {"text": "jahas", "design": "chocolate"},
+#     "Snowtopia": {"text": "fspecto", "design": "sleepy"},
+#     "Swallow the Sea": {"text": "vin", "design": "vin"},
+#     "Tekken (2010) Movie": {"text": "jahas", "design": "vin"},
+#     "Coffee Talk": {"text": "abubis", "design": "adri"},
+#     "Storm Boy": {"text": "celtic", "design": "sleepy"}
+# }
+
+# class DynamicButtonView(discord.ui.View):
+#     def __init__(self, reviews, stage=1, previous_picks=[]):
+#         super().__init__()
+#         self.reviews = reviews
+#         self.stage = stage
+#         self.previous_picks = previous_picks
+#         self.add_buttons()
+    
+#     def add_buttons(self):
+#         for game, review in self.reviews.items():
+#             button = discord.ui.Button(label=game, custom_id=game.replace(" ", ""))
+#             button.callback = self.create_callback(game, review)
+#             self.add_item(button)
+    
+#     def create_callback(self, game, review):
+#         async def button_callback(interaction: discord.Interaction):
+#             self.clear_items()
+#             await interaction.response.edit_message(content=f"## Favourite Review #{self.stage}\nYou picked `{game}`!", view=self)
+#             await self.handle_next_choice(interaction, game, review)
+#         return button_callback
+    
+#     async def handle_next_choice(self, interaction, game, review):
+#         self.previous_picks.append((game, review))
+#         if self.stage < 3:
+#             new_reviews = {g: r for g, r in self.reviews.items() if r['text'] != review['text']}
+#             new_view = DynamicButtonView(new_reviews, stage=self.stage + 1, previous_picks=self.previous_picks)
+#             await interaction.followup.send(f"## Favourite Review #{self.stage + 1}", view=new_view)
+#         else:
+#             summary = "\n".join([f"{i+1}. `{g}`" for i, (g, r) in enumerate(self.previous_picks)])
+#             await interaction.followup.send(f"Thank you for voting! Here are your picks:\n{summary}")
+
+# @bot.command()
+# async def vote(ctx):
+#     view = DynamicButtonView(reviews)
+#     await ctx.send(f"Hello, dear reader, and welcome to the SGM voting ballot!\nPlease choose among the following options which was your favorite review in our last issue, based on **the words written by the reviewer**. Don't worry, you'll get to vote on the designs afterwards! You'll cast 3 votes each time, giving 3 points to your first choice, 2 to your second and 1 to your third choice.")
+#     await ctx.send("## Favourite Review #1", view=view)
+
+async def generate_typerace_paragraph():
+
+    try:
+        chat_completion = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            temperature=1.5,
+            max_tokens=300,
+            messages=[
+                {"role": "system", "content": "Generate a random paragraph of approximately 30 words, without quotes."}
+            ]
+        )
+
+        p = chat_completion.choices[0]['message']['content']
+
+    except Exception as e: return(e)
+
+    print(p)
+
+    paragraph = textwrap.fill(p, width=55)
+
+    image = Image.new("RGB", (800, 200), "black")
+    draw = ImageDraw.Draw(image)
+    font = ImageFont.truetype(chosen_font, 30)
+    draw.text((10, 10), paragraph, font=font)
+    image.save('typeracer_prompt.png')
+
+    return p
+
+prevent_tr_command = False
+
+@bot.command(aliases=[ 'tr' ])
+async def typerace(ctx, timer=120):
+
+    global prevent_tr_command
+
+    if prevent_tr_command:
+        await ctx.send(f"<@{ctx.author.id}> a round of Type Racer is already ongoing!")
+        return
+
+    try:
+        typeracer_timer = int(timer)
+        if not 30 <= typeracer_timer <= 240:
+            raise Exception("`timer` argument must be an integer representing seconds, and must be no less than `30` and no more than `240`.")
+    except Exception as e:
+        await ctx.send(f"Error: {e}")
+        return
+
+    def check(m):
+        return m.author != bot.user and m.channel == ctx.channel
+    
+    prevent_tr_command = True
+
+    await ctx.send("Starting a Type Racer round...")
+
+    paragraph = await generate_typerace_paragraph()
+    tokenized_paragraph = paragraph.split(' ')
+    file = discord.File('typeracer_prompt.png')
+    unix_timestamp = int(time.mktime((datetime.now()+timedelta(seconds=5)).timetuple()))
+
+    countdown = await ctx.send(f"Get ready to type... <t:{unix_timestamp}:R>")
+
+    await asyncio.sleep(4)
+    round_end_timer = int(time.mktime((datetime.now()+timedelta(seconds=typeracer_timer)).timetuple()))
+
+    await countdown.edit(content=f"Start! Round ends <t:{round_end_timer}:R>.")
+    await ctx.send(file=file)
+
+    characters_count = len(paragraph)
+    gross_entries = characters_count/5
+
+    time_started = datetime.now()
+    now = datetime.now()
+
+    while True:
+
+        try:
+            message = await bot.wait_for('message', check=check, timeout=typeracer_timer)
+
+            tokenized_message = message.content.split(' ')
+            d = difflib.Differ()
+            diff = list(d.compare(tokenized_paragraph, tokenized_message))
+            mistakes = '\n'.join([word for word in diff if word.startswith('- ') or word.startswith('+ ')])
+
+            if len(mistakes)/4 > len(tokenized_paragraph):
+                continue
+
+            now = datetime.now()
+            complete_time = now - time_started
+            c_seconds = complete_time.total_seconds()
+            c_minutes = c_seconds / 60.0
+
+            gross_wpm = gross_entries/c_minutes
+            error_rate = (len(mistakes)/2)/c_minutes
+            net_wpm = gross_wpm-error_rate
+
+            if mistakes:
+                mistakes_text = f"You\'ve made the following mistakes:\n```diff\n{mistakes}\n```"
+            else:
+                mistakes_text = ''
+
+            await ctx.send(f"""
+<@{message.author.id}> has completed the challenge in `{complete_time.seconds}s:{complete_time.microseconds}ms`!
+Your WPM is `{gross_wpm:.2f}`.{f' Your Net WPM (with mistakes penalties) is `{net_wpm:.2f}`.' if mistakes else ''}
+{mistakes_text}
+""")
+            
+            await message.delete()
+
+            now = datetime.now()
+
+            time_elapsed = now-time_started
+            time_elapsed = timedelta(seconds=time_elapsed.seconds)
+
+            timer_deltatime = timedelta(seconds=typeracer_timer)
+
+            typeracer_timer = timer_deltatime-time_elapsed
+            typeracer_timer = typeracer_timer.seconds
+
+        except asyncio.TimeoutError:
+            break
+
+        continue
+    
+    await ctx.send("Type Racer round is over!")
+    await countdown.edit(content="Round over!")
+
+    prevent_tr_command = False
 
 # HELP COMMANDS
 
@@ -5541,7 +5782,7 @@ async def help(ctx, query=None):
          "Attempts to fetch a user's profiles links by their name passed as the query."),
 
         ("slots",
-         f"Play PaigeSlots! Get 3 matching fruits, and you can win a free game key! Cooldown time is {slots_cooldown}."),
+         f"Play PaigeSlots! Get 3 matching fruits, and you can win a free game key! Cooldown time is {slots_cooldown}. See `slotskey` and `slotsprizes` commands for utility."),
 
         ("slotskey `activation-key-here, platform, Title Here`",
          f"Contribute a game key to the slots command prize pool. Must be issued privately via DM to {botname}."),
@@ -5975,6 +6216,10 @@ async def daily_tasks():
 
         await cha.send("Running daily task `steamID_to_name()`...")
         steamID_to_name()
+        await cha.send("Done!")
+
+        await cha.send("Running daily task `get_gtf_flags()`...")
+        cached_flag_items = get_gtf_flags()
         await cha.send("Done!")
 
         await cha.send("Backing up data to AWS S3 bucket `upload_backups()`...")
