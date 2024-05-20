@@ -5603,7 +5603,7 @@ async def generate_typerace_paragraph():
 
     print(p)
 
-    paragraph = textwrap.fill(p, width=55)
+    paragraph = textwrap.fill(p, width=50)
 
     image = Image.new("RGB", (800, 200), "black")
     draw = ImageDraw.Draw(image)
@@ -5823,6 +5823,9 @@ async def help(ctx, query=None):
         ("gtp (aliases: `tpir`)",
          "Begin a \"The Price Is Right\" inspired minigame, \"Guess the Price\"! Complete to guess as closely to the winning bid price (USD) of a random Ebay auction."),
 
+        ("gtf `cache`",
+         "Begin a \"Guess The Flag\" chat game! Complete to be the first to guess the name of a country by its flag. Optional `cache` argument will fetch and cache flags from the source (operation completes automatically daily)."),
+
         ("hltb `query`",
          "Fetches How Long To Beat data for the best match of `query`."),
 
@@ -5842,7 +5845,10 @@ async def help(ctx, query=None):
          f"Play the mining idle game. Non-argument displays your mine's information. See See `mineguide` (`{prefixes[0]}mineguide`) for details."),
 
         ("bookmark (aliases: `bm`)",
-         f"Have {botname} DM you a bookmark for the desired message in the server. Reply to a message with this command to bookmark the reply.")
+         f"Have {botname} DM you a bookmark for the desired message in the server. Reply to a message with this command to bookmark the reply."),
+
+        ("typerace (aliases: `tr`)",
+         "Begin a Type Racer chat game! Test your typing speed and accuracy by typing out the generated paragraph.")
     ]
 
     mod_commands_list = [
