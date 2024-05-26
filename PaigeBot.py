@@ -2416,6 +2416,8 @@ async def tc(ctx, *args):
             if len(args) > 1:
                 user = get_user_from_username(args[1])
                 if not user:
+                    user = bot.get_user(int(args[1]))
+                if not user:
                     await ctx.send("User not found in database!")
                     prevent_binder_command = False
                     return
@@ -2452,6 +2454,8 @@ async def tc(ctx, *args):
             # Handling if a username is passed as argument
             if len(args) > 1:
                 user = get_user_from_username(args[1])
+                if not user:
+                    user = bot.get_user(int(args[1]))
                 if not user:
                     await ctx.send("User not found in database!")
                     return
@@ -3057,8 +3061,8 @@ async def tc(ctx, *args):
                         del database[user_id][card]['user']
                         del database[user_id][card]['rarity']
                         del database[user_id][card]['holo']
-                    except:
-                        pass
+                    except Exception as e:
+                        print(e)
 
                     is_holo = False
                     if card.endswith('_holo'):
@@ -4300,8 +4304,8 @@ async def mine(ctx, *args):
                         embed = discord.Embed(title=unit['title'], description=unit['description'])
                         embed.set_image(url=f"attachment://{what.replace(' ', '_')}.png")
                         await ctx.send(embed=embed, file=file)
-                except:
-                    pass
+                except Exception as e:
+                    print(f"mine() first unit purchase message failed: {e}")
 
                 mine_data[str(ctx.author.id)]['assets']['money'] -= cost
                 mine_data[str(ctx.author.id)]['crew'][what]['count'] += count
@@ -4362,7 +4366,7 @@ async def mine(ctx, *args):
 
                     embed.add_field(
                         name=f"{crew.title()} (`{crew_info['abbreviation']}`)",
-                        value=f"{'✅' if cost_message == 'Already upgraded' else (':no_entry_sign:' if cost > money else ':arrow_double_up:')} Cost: {cost_message}{f' (`$ {human_num(cost-money)}` more needed)' if cost > money else ''}",
+                        value=f"{'✅' if cost_message == 'Already upgraded' else (':no_entry_sign:' if cost > money else ':arrow_double_up:')} Cost: {cost_message}{f' (`$ {human_num(cost-money)}` more needed)' if cost > money and not cost_message == 'Already upgraded' else ''}",
                         inline=False
                     )
                 
@@ -5101,8 +5105,8 @@ async def mine_process():
         try:
             cha = bot.get_channel(miners_channel)
             await cha.send(f"<@&{role_miners}> GEMS MARKET UPDATE: {message}\n```diff\n{highlight}💎1 = $ {gems_value_multi:.2f}\n```")
-        except:
-            pass
+        except Exception as e:
+            print(f"mine_process() gem market update message failed: {e}")
 
     # END MARKET EVENTS
     # -----------------
@@ -5131,8 +5135,8 @@ async def mine_process():
             ]
             greeting = random.choice(random_greetings)
             await cha.send(f"<@&{role_miners}> **GOVERNMENT ALERT:**\n{greeting},\n\n{random_event.message}\n```diff\n{random_event.desc}\n```\n**APPLIES TO:** {', '.join([tag for tag in players_tags])}")
-        except:
-            pass
+        except Exception as e:
+            print(f"mine_process() random event failed: {e}")
     
     # END RANDOM EVENTS
     # -----------------
@@ -5162,8 +5166,12 @@ async def mine_process():
             mine_data[str(userID)]['global stats']['gems mined'] += earnings
             
             user = bot.get_user(int(userID))
+            if not user:
+                user_name = f"{userID} (Lost Miner)"
+            else:
+                user_name = user.name
             embed.add_field(
-                name=user.name,
+                name=user_name,
                 value=f"💎 {human_num(mine_data[str(userID)]['assets']['gems'])} (+{human_num(earnings)}/min)",
                 inline=False
             )
@@ -5196,8 +5204,8 @@ async def mine_process():
         with open('permanent_variables.json', 'w') as f:
             json.dump(persistent_data, f, indent=4)
 
-    except:
-        pass
+    except Exception as e:
+        print(f"mine_process() function failed: {e}")
 
     with open('mine.json', 'w') as f:
         json.dump(mine_data, f, indent=4)
@@ -5438,8 +5446,8 @@ def get_gtf_flags():
             page = bs(r.content, "html.parser")
             items = page.find_all("div", {"class": "col-md-4"})
 
-        except:
-            pass
+        except Exception as e:
+            print(f"get_gtf_flags() function failed: {e}")
     
     return items
 
