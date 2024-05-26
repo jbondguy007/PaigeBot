@@ -132,7 +132,7 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
 STEAM_GROUP_ID = os.getenv("STEAM_GROUP_ID")
 SG_GROUP_ID = os.getenv("SG_GROUP_ID")
-DISCORD_SERVER_ID = os.getenv("DISCORD_SERVER_ID")
+DISCORD_SERVER_ID = int(os.getenv("DISCORD_SERVER_ID"))
 DEADLINES_GSHEET_ID = os.getenv("DEADLINES_GSHEET_ID")
 
 s3 = boto3.client(
