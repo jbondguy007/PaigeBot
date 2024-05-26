@@ -130,6 +130,11 @@ AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
+STEAM_GROUP_ID = os.getenv("STEAM_GROUP_ID")
+SG_GROUP_ID = os.getenv("SG_GROUP_ID")
+DISCORD_SERVER_ID = os.getenv("DISCORD_SERVER_ID")
+DEADLINES_GSHEET_ID = os.getenv("DEADLINES_GSHEET_ID")
+
 s3 = boto3.client(
     's3',
     aws_access_key_id=AWS_ACCESS_KEY,
@@ -328,7 +333,7 @@ def ensure_dir(directory):
         os.makedirs(directory)
 
 def fetch_giveaways(page=1):
-    url = f'https://www.steamgifts.com/group/X4YE7/sgmonthlymagazine?format=json&page={str(page)}'
+    url = f'https://www.steamgifts.com/group/{SG_GROUP_ID}/{STEAM_GROUP_ID}?format=json&page={str(page)}'
     r = requests.get(url)
     giveaways = r.json()
     return giveaways
@@ -362,15 +367,15 @@ def fetch_all_giveaways():
     return giveaways
 
 def fetch_raw_deadlines():
-    sheet_id = '13oNY-6Mh7vNZ4y_QjUOfJteZ38qUaz1lodK5gC1nLQc'
+    sheet_id = DEADLINES_GSHEET_ID
     api_key = GOOGLE_API_KEY
-    api_url = f'https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/Deadlines!A1:F1000?key={GOOGLE_API_KEY}'
+    api_url = f'https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/Deadlines!A1:F1000?key={api_key}'
     r = requests.get(api_url)
     data = r.json()
     return data['values']
 
 def fetch_group_members_count():
-    url = 'https://steamcommunity.com/groups/SGMonthlyMagazine'
+    url = f'https://steamcommunity.com/groups/{STEAM_GROUP_ID}'
     r = requests.get(url)
     page = bs(r.content, "html.parser")
     member_count = page.find_all("span", {"class": "count"})[0].text
@@ -402,7 +407,7 @@ def fetch_sg_wishlists(AppID):
     if not game_info:
         return (None, '0')
     game_title = game_info['name']
-    url = f'https://www.steamgifts.com/group/X4YE7/sgmonthlymagazine/wishlist/search?q={game_title}'
+    url = f'https://www.steamgifts.com/group/{SG_GROUP_ID}/{STEAM_GROUP_ID}/wishlist/search?q={game_title}'
     r = requests.get(url)
     page = bs(r.content, "html.parser")
     search_result = page.find_all("div", {"class": "table__row-outer-wrap"})
@@ -450,7 +455,7 @@ def check_sg_bundled_list(AppID, game_title):
         return False
 
 def fetch_members_steamID64():
-    url = 'https://steamcommunity.com/groups/SGMonthlyMagazine/memberslistxml?xml=1'
+    url = f'https://steamcommunity.com/groups/{STEAM_GROUP_ID}/memberslistxml?xml=1'
     r = requests.get(url)
     members_steamID64_list = xmltodict.parse(r.content)
     return members_steamID64_list['memberList']['members']['steamID64']
@@ -494,7 +499,7 @@ def search_magazine_index(query):
     except:
         game_title = query
     
-    url = 'https://steamcommunity.com/groups/SGMonthlyMagazine/discussions/4/3790379982488876975/'
+    url = f'https://steamcommunity.com/groups/{STEAM_GROUP_ID}/discussions/4/3790379982488876975/'
     r = requests.get(url)
     page = bs(r.content, "html.parser")
     thread = page.find("div", {"id": "forum_op_3790379982488876975"})
@@ -887,7 +892,7 @@ Screenshot of the Month thread: <{steamgifts_threads['screenshots']}>
 
 @bot.command()
 async def rules(ctx):
-    await ctx.send(f"{botname} recommends reading the rules! <https://steamcommunity.com/groups/SGMonthlyMagazine/discussions/3/3758852249517826899/>")
+    await ctx.send(f"{botname} recommends reading the rules! <https://steamcommunity.com/groups/{STEAM_GROUP_ID}/discussions/3/3758852249517826899/>")
 
 @bot.command()
 async def deadline(ctx, username):
@@ -2354,7 +2359,7 @@ async def tc_legacy_check():
     with open('tradingcards/cards.json') as feedsjson:
         all_cards = json.load(feedsjson)
     
-    SGM_guild = bot.get_guild(1067986921021788260)
+    SGM_guild = bot.get_guild(DISCORD_SERVER_ID)
     server_members = [str(user.id) for user in SGM_guild.members]
 
     legacy_cards = [card for card, info in all_cards.items() if card not in server_members and card not in [card+'_holo' for card in server_members] and not info.get('legacy')]
@@ -6077,7 +6082,7 @@ async def maintenance(ctx, arg='start'):
 @commands.has_any_role(role_staff)
 async def verify(ctx):
 
-    SGM_guild = bot.get_guild(1067986921021788260)
+    SGM_guild = bot.get_guild(DISCORD_SERVER_ID)
     server_members = SGM_guild.members
     verified_role = ctx.guild.get_role(role_verified)
 
