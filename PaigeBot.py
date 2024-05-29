@@ -806,9 +806,8 @@ async def on_message(message):
     if message.author == bot.user:
         return
     
-    # TODO uncomment
-    # if bot.user.id == 823385752486412290 and message.author.id not in [jbondguy007_userID, 479319946153689098, 279368230777126912, 391705444042670080, 319190839026909184, 418868712846917632]:
-    #     return
+    if bot.user.id == 823385752486412290 and message.author.id not in [jbondguy007_userID, 479319946153689098, 279368230777126912, 391705444042670080, 319190839026909184, 418868712846917632]:
+        return
     
     print(f"{message.created_at} | #{message.channel} | @{message.author} | {message.content}\n")
 
@@ -2722,7 +2721,7 @@ async def tc(ctx, *args):
                 
                 # EXAMPLE:
                     # tradeID: 1142364330424279111
-                    # Details: {'from': 172522306147581952, 'H': ['479319946153689098_holo', {'user': 'Captain Monocle', 'rarity': 'Ordinary', 'holo': True, 'count': 25}], 'W': ['823385752486412290', {'user': 'FoxyBoi', 'rarity': 'Ordinary', 'holo': False, 'count': 1}]}
+                    # Details: {'from': 172522306147581952, 'have': '479319946153689098_holo', 'want': '823385752486412290'}
 
                 trader = details['from']
                 user = ctx.author.id
@@ -2780,6 +2779,91 @@ async def tc(ctx, *args):
                 return
 
             await ctx.send(embed=embed)
+
+    ##### WIP #####
+
+    #     elif args[0].lower() == 'offers':
+    #         with open('tradingcards/trades.json') as feedsjson:
+    #             trades = json.load(feedsjson)
+
+    #         for user_id, offers in trades.items():
+    #             for offer_id, offer_info in offers.items():
+    #                 user_offers = {user_id: {offer_id: offer_info} for trade_id, trade_info in offers.items() if int(trade_info['from']) == ctx.author.id}
+
+    #         if not user_offers:
+    #             await ctx.send("You have no ongoing trading cards trade offers.")
+    #             return
+            
+    #         print(user_offers)
+            
+    #         embed = discord.Embed(title=f"{ctx.author.name}'s Sent Offers", description=f"Issue the command `{prefixes[0]}tc cancel trade-ID` to cancel an ongoing offer.", color=bot_color)
+
+    #         trades_for_deletion = []
+
+    #         for user_id, offer in user_offers.items():
+    #             for i, (tradeID, details) in enumerate(offer.items()):
+                    
+    #                 # EXAMPLE:
+    #                     # tradeID: 1142364330424279111
+    #                     # Details: {'from': 172522306147581952, 'have': '479319946153689098_holo', 'want': '823385752486412290'}
+
+
+    #                 trader = details['from']
+    #                 user = ctx.author.id
+
+    #                 given_card_ID = details['have']
+    #                 requested_card_ID = details['want']
+
+    #                 given_card = all_cards[str(given_card_ID)]
+    #                 requested_card = all_cards[str(requested_card_ID)]
+
+    #                 # Check if the trader's card is still available for trading
+    #                 try:
+    #                     receive = database[str(trader)][given_card_ID]
+    #                 except:
+    #                     trades_for_deletion.append(tradeID)
+    #                     continue
+
+    #                 # Check if the tradee's card is still available for trading
+    #                 try:
+    #                     deliver = database[str(user_id)][requested_card_ID]
+    #                 except:
+    #                     trades_for_deletion.append(tradeID)
+    #                     continue
+
+    #                 have_requested = database[str(user)].get(requested_card_ID, '')
+    #                 have_given = database[str(user)].get(given_card_ID, '')
+
+    #                 if have_requested:
+    #                     have_requested = have_requested['count']
+    #                 else:
+    #                     have_requested = 0
+                    
+    #                 if have_given:
+    #                     have_given = have_given['count']
+    #                 else:
+    #                     have_given = 0
+
+    #                 embed.add_field(
+    #                     name=f"{i+1}. Trade ID: {tradeID}",
+    #                     value=f"""To: <@{user_id}>
+    # [H]: {given_card['name']}{' (HOLO)' if given_card['holo'] else ''} - {given_card['rarity']} (you have {have_given})
+    # [W]: {requested_card['name']}{' (HOLO)' if requested_card['holo'] else ''} - {requested_card['rarity']} (you have {have_requested})""",
+    #                     inline=False
+    #                 )
+            
+    #         if trades_for_deletion:
+    #             for trade_ID in trades_for_deletion:
+    #                 del trades[str(user_id)][trade_ID]
+    #             # Update trades file in case a trade was deleted
+    #             with open("tradingcards/trades.json", "w") as f:
+    #                 json.dump(trades, f, indent=4)
+            
+    #         if not embed.fields:
+    #             await ctx.send("You have no trading cards trade offers pending.")
+    #             return
+
+    #         await ctx.send(embed=embed)
 
         elif args[0].lower() == 'accept' or args[0].lower() == 'reject' or args[0].lower() == 'cancel':
 
@@ -2962,6 +3046,8 @@ async def tc(ctx, *args):
                         'tc_trade_count_100'
                     ]
                 )
+        
+        ##### WIP #####
         
         # elif args[0].lower() == 'prestige':
         #     player_collection = fetch_player_collection(str(ctx.author.id))
@@ -5216,6 +5302,8 @@ async def mine_process():
     
     prevent_mine_command = False
 
+    ##### WIP #####
+
 # civ_name_gen_kws_consonants = ['b', 'd', 'g', 'h', 'k', 'l', 'm', 'n', 'p', 'r', 's', 't', 'v', 'z']
 # civ_name_gen_kws_vowels = ['a', 'e', 'i', 'o', 'u', 'oo', 'ee']
 
@@ -5607,7 +5695,7 @@ async def generate_typerace_paragraph():
     try:
         chat_completion = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            temperature=1.7,
+            temperature=1.5,
             max_tokens=300,
             messages=[
                 {"role": "system", "content": "Generate a random and unique paragraph of approximately 30 words, without quotes."}
@@ -5622,7 +5710,7 @@ async def generate_typerace_paragraph():
 
     paragraph = textwrap.fill(p, width=50)
 
-    image = Image.new("RGB", (800, 200), "black")
+    image = Image.new("RGB", (850, 200), "black")
     draw = ImageDraw.Draw(image)
     font = ImageFont.truetype(chosen_font, 30)
     draw.text((10, 10), paragraph, font=font)
@@ -5633,7 +5721,55 @@ async def generate_typerace_paragraph():
 prevent_tr_command = False
 
 @bot.command(aliases=[ 'tr' ])
-async def typerace(ctx, timer=120):
+async def typerace(ctx, *args):
+    
+    if args:
+    
+        if args[0].lower() == 'leaderboard':
+            
+            try:
+
+                lb_type = args[1]
+
+                if lb_type.lower() not in ['net', 'gross', 'faultless']:
+                    await ctx.send(f"Command expects second argument `net`, `gross`, or `faultless`, but received `{lb_type}`.")
+                    return
+            
+            except:
+
+                lb_type = 'net'
+
+            with open('typerace.json', 'r') as outfile:
+                typerace_records = json.load(outfile)
+            
+            if not typerace_records:
+                await ctx.send("No scores recorded, yet!")
+                return
+            
+            # Sort scores
+
+            sorted_wpm = dict(sorted(typerace_records.items(), key=lambda item: item[1][lb_type], reverse=True))
+
+            embed = discord.Embed(title=f"Typerace Leaderboard by {lb_type.capitalize()} WPM")
+
+            for i, (user, records) in enumerate(sorted_wpm.items()):
+                if not bot.get_user(int(user)):
+                    continue
+                embed.add_field(
+                    name=f"{':first_place: ' if i == 0 else (':second_place: ' if i == 1 else (':third_place: ' if i == 2 else ''))}{bot.get_user(int(user)).name}",
+                    value=f'{lb_type.capitalize()} WPM: {records[lb_type]:.2f}',
+                    inline=False
+                )
+            
+            await ctx.send(embed=embed)
+
+            return
+
+        else:
+            timer = args[0]
+    
+    else:
+        timer = 120
 
     global prevent_tr_command
 
@@ -5720,17 +5856,64 @@ async def typerace(ctx, timer=120):
             net_wpm = gross_wpm-error_rate
 
             # Prepare string snippet to point out mistakes, if any.
+            
+            faultless = False
 
             if mistakes:
                 mistakes_text = f"You\'ve made the following mistakes:\n```diff\n{mistakes_listed_string}\n```"
             else:
                 mistakes_text = ''
+                faultless = True
+
+            ### Save record ###
+
+            new_net_wpm_record = False
+            new_gross_wpm_record = False
+            new_faultless_wpm_record = False
+
+            with open('typerace.json', 'r') as outfile:
+                typerace_records = json.load(outfile)
+
+            user_id = message.author.id
+
+            # Handle if the user is not within the leaderboard yet.
+
+            if str(user_id) not in typerace_records.keys():
+                typerace_records[str(user_id)] = {
+                    'net': net_wpm,
+                    'gross': gross_wpm,
+                    'faultless': net_wpm if faultless else 0.0
+                }
+            
+                new_net_wpm_record = True
+                new_gross_wpm_record = True
+                if faultless:
+                    new_faultless_wpm_record = True
+
+            # Handle updating leaderboard score.
+            
+            if typerace_records[str(user_id)]['net'] < net_wpm:
+                typerace_records[str(user_id)]['net'] = net_wpm
+                new_net_wpm_record = True
+            if typerace_records[str(user_id)]['gross'] < gross_wpm:
+                typerace_records[str(user_id)]['gross'] = gross_wpm
+                new_gross_wpm_record = True
+            if faultless and typerace_records[str(user_id)]['faultless'] < net_wpm:
+                typerace_records[str(user_id)]['faultless'] = net_wpm
+                new_faultless_wpm_record = True
+
+            # Save to database.
+
+            with open('typerace.json', 'w') as f:
+                json.dump(typerace_records, f, indent=4)
 
             # Send the response, then delete the user's message.
 
             await ctx.send(f"""
-<@{message.author.id}> has completed the challenge in `{complete_time.seconds}s:{complete_time.microseconds}ms`!
-Your WPM is `{gross_wpm:.2f}`.{f' Your Net WPM (with mistakes penalties) is `{net_wpm:.2f}`.' if mistakes else ''}
+<@{user_id}> has completed the challenge in `{complete_time.seconds}s:{complete_time.microseconds}ms`!
+Your Gross WPM is `{gross_wpm:.2f}`{' (New personal best!)' if new_gross_wpm_record else ''}.
+{'You have beat your personal best `Faultless` record!' if new_faultless_wpm_record else ''}
+{f'Your Net WPM (with mistakes penalties) is `{net_wpm:.2f}`{" (New personal best!)" if new_net_wpm_record else ""}.' if mistakes else ''}
 {mistakes_text}
 """)
             
@@ -5882,8 +6065,8 @@ async def help(ctx, query=None):
         ("bookmark (aliases: `bm`)",
          f"Have {botname} DM you a bookmark for the desired message in the server. Reply to a message with this command to bookmark the reply."),
 
-        ("typerace (aliases: `tr`)",
-         "Begin a Type Racer chat game! Test your typing speed and accuracy by typing out the generated paragraph.")
+        ("typerace (aliases: `tr`) `timer` `leaderboard`",
+         f"Begin a Type Racer chat game! Test your typing speed and accuracy by typing out the generated paragraph.\nOptional `timer` argument expects an integer between 30 and 240 for round duration, defaults 120. Optional argument `leaderboard` displays leaderboard. Additional argument `net`, `gross`, or `faultless` displays the relevant leaderboard. (Example: `{prefixes[0]}tr leaderboard faultless`)")
     ]
 
     mod_commands_list = [
