@@ -5706,7 +5706,7 @@ async def generate_typerace_paragraph():
     try:
         chat_completion = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            temperature=1.5,
+            temperature=1.2,
             max_tokens=300,
             messages=[
                 {"role": "system", "content": f"Generate a random and paragraph of approximately 30 words, without quotes. The topic should relate to the word {topic}."}
