@@ -5690,7 +5690,18 @@ async def gtf(ctx, arg=None):
 #     await ctx.send(f"Hello, dear reader, and welcome to the SGM voting ballot!\nPlease choose among the following options which was your favorite review in our last issue, based on **the words written by the reviewer**. Don't worry, you'll get to vote on the designs afterwards! You'll cast 3 votes each time, giving 3 points to your first choice, 2 to your second and 1 to your third choice.")
 #     await ctx.send("## Favourite Review #1", view=view)
 
+async def random_noun():
+    url = 'https://www.desiquintans.com/noungenerator?count=1'
+    r = requests.get(url)
+    page = bs(r.content, "html.parser")
+    random_noun = page.find('div', class_='greenBox').text
+    topic = random_noun.replace('Your random noun is:', '')
+    return topic
+
 async def generate_typerace_paragraph():
+
+    topic = await random_noun()
+    print(f"TOPIC: {topic}")
 
     try:
         chat_completion = openai.ChatCompletion.create(
@@ -5698,7 +5709,7 @@ async def generate_typerace_paragraph():
             temperature=1.5,
             max_tokens=300,
             messages=[
-                {"role": "system", "content": "Generate a random and unique paragraph of approximately 30 words, without quotes."}
+                {"role": "system", "content": f"Generate a random and paragraph of approximately 30 words, without quotes. The topic should relate to the word {topic}."}
             ]
         )
 
@@ -5822,7 +5833,14 @@ async def typerace(ctx, *args):
             tokenized_message = message.content.split(' ')
             d = difflib.Differ()
             diff = list(d.compare(tokenized_paragraph, tokenized_message))
+
             mistakes = [word for word in diff if word.startswith('- ') or word.startswith('+ ')]
+
+            mistakes_m = len([word for word in mistakes if word.startswith('- ')])
+            mistakes_p = len([word for word in mistakes if word.startswith('+ ')])
+
+            mistakes_count = max(mistakes_m, mistakes_p)
+
             mistakes_listed_string = '\n'.join(mistakes)
 
             # Calculates and updates the timer after each message
@@ -5852,7 +5870,7 @@ async def typerace(ctx, *args):
             c_minutes = c_seconds / 60.0
 
             gross_wpm = gross_entries/c_minutes
-            error_rate = (len(mistakes)/2)/c_minutes
+            error_rate = mistakes_count/c_minutes
             net_wpm = gross_wpm-error_rate
 
             # Prepare string snippet to point out mistakes, if any.
@@ -5916,7 +5934,7 @@ Your Gross WPM is `{gross_wpm:.2f}`{' (New personal best!)' if new_gross_wpm_rec
 {f'Your Net WPM (with mistakes penalties) is `{net_wpm:.2f}`{" (New personal best!)" if new_net_wpm_record else ""}.' if mistakes else ''}
 {mistakes_text}
 """)
-            
+
             await message.delete()
 
         # Timeout action breaks out of the loop if the time has run out.
