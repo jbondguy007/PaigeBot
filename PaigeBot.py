@@ -787,15 +787,27 @@ async def on_connect():
 
 @bot.event
 async def on_command_error(ctx, error):
-    global prevent_binder_command, prevent_gtp_command, prevent_mine_command, prevent_gtf_command, prevent_tr_command
+    global prevent_binder_command, prevent_gtp_command, prevent_mine_command, prevent_gtf_command, prevent_tr_command, prevent_trivia_command
     prevent_binder_command = False
     prevent_gtp_command = False
     prevent_mine_command = False
     prevent_gtf_command = False
     prevent_tr_command = False
+    prevent_trivia_command = False
     print(f"ERROR: {str(error)}")
+    
     traceback.print_exception(type(error), error, error.__traceback__)
+
+    if bot.user.id == 1077417730900230214:
+        tb = traceback.format_exception(type(error), error, error.__traceback__)
+        tb = '\n'.join(tb)
+        cha = bot.get_channel(1251016228248490066)
+        link = f"https://discord.com/channels/{ctx.guild.id}/{ctx.channel.id}/{ctx.message.id}"
+        await cha.send(f"{link}: {str(error)}\n```\n{tb}\n```")
+
     await ctx.send(f"<:warning:1077420799713087559> Failure to process:\n`{str(error)}`")
+    if 'help' in ctx.message.content:
+        await ctx.send(f"Did you mean to use the `{prefixes[0]}help` module? Try `{prefixes[0]}help {ctx.invoked_with}`")
     await achievement(ctx=ctx, achievement_ids=['misc_failed_command'])
 
 # ON MESSAGE
@@ -806,7 +818,7 @@ async def on_message(message):
     if message.author == bot.user:
         return
     
-    if bot.user.id == 823385752486412290 and message.author.id not in [jbondguy007_userID, 479319946153689098, 279368230777126912, 391705444042670080, 319190839026909184, 418868712846917632]:
+    if bot.user.id == 823385752486412290 and message.author.id not in [jbondguy007_userID, 479319946153689098, 279368230777126912, 391705444042670080, 319190839026909184, 418868712846917632, 191743475396509698, 206889965458685952]:
         return
     
     print(f"{message.created_at} | #{message.channel} | @{message.author} | {message.content}\n")
@@ -3228,6 +3240,9 @@ async def tc(ctx, *args):
                 unlegacy_IDs_list = '\n'.join(legacy_IDs)
                 await ctx.send(f"{len(unlegacy_IDs)} cards have been detected to be no longer legacy cards:\n{unlegacy_IDs_list}")
 
+        else:
+            raise Exception(f"Argument {args[0]} is not recognized.")
+
         return
     
 #     # NORMAL COMMAND
@@ -5566,9 +5581,9 @@ async def gtf(ctx, arg=None):
                 await ctx.send(f"Task failed: {e}")
                 return
 
-        if prevent_gtf_command:
-            await ctx.send(f"<@{ctx.author.id}> a Guess The Flag round is already ongoing!")
-            return
+    if prevent_gtf_command:
+        await ctx.send(f"<@{ctx.author.id}> a Guess The Flag round is already ongoing!")
+        return
 
     prevent_gtf_command = True
 
@@ -5767,7 +5782,7 @@ async def typerace(ctx, *args):
                 if not bot.get_user(int(user)):
                     continue
                 embed.add_field(
-                    name=f"{':first_place: ' if i == 0 else (':second_place: ' if i == 1 else (':third_place: ' if i == 2 else ''))}{bot.get_user(int(user)).name}",
+                    name=f"{':first_place:' if i == 0 else (':second_place:' if i == 1 else (':third_place:' if i == 2 else str(i+1)))} {bot.get_user(int(user)).name}",
                     value=f'{lb_type.capitalize()} WPM: {records[lb_type]:.2f}',
                     inline=False
                 )
@@ -5793,7 +5808,7 @@ async def typerace(ctx, *args):
         if not 30 <= typeracer_start_timer <= 240:
             raise Exception("`timer` argument must be an integer representing seconds, and must be no less than `30` and no more than `240`.")
     except Exception as e:
-        await ctx.send(f"Error: {e}")
+        await bot.on_command_error(ctx, commands.CommandInvokeError(e))
         return
 
     def check(m):
@@ -5949,6 +5964,178 @@ Your Gross WPM is `{gross_wpm:.2f}`{' (New personal best!)' if new_gross_wpm_rec
 
     prevent_tr_command = False
 
+trivia_score = {}
+trivia_guesses = {}
+class TriviaButtonsView(discord.ui.View):
+    def __init__(self, choices, answer):
+        super().__init__()
+        self.choices = choices
+        self.answer = answer
+        self.add_buttons()
+    
+    def add_buttons(self):
+        for choice in self.choices:
+            button = discord.ui.Button(label=choice, custom_id=choice.replace(" ", ""))
+            button.callback = self.create_callback(choice, self.answer)
+            self.add_item(button)
+    
+    def create_callback(self, choice, answer):
+        async def button_callback(interaction: discord.Interaction):
+            user = interaction.user
+            global trivia_score, trivia_guesses
+
+            if not trivia_score.get(user.id):
+                trivia_score[user.id] = 0
+
+            if trivia_guesses.get(user.id):
+                await interaction.response.send_message(f"<@{user.id}> You've already chosen an answer.", ephemeral=True, delete_after=3.0)
+                return
+
+            if choice.lower() == answer.lower():
+                await interaction.response.send_message(f"<@{user.id}> Correct!", ephemeral=True)
+                trivia_score[user.id] += 1
+            else:
+                await interaction.response.send_message(f"<@{user.id}> Wrong!", ephemeral=True)
+            
+            trivia_guesses[user.id] = choice
+
+        return button_callback
+
+trivia_rounds_setting = 10
+trivia_round_number = 1
+
+prevent_trivia_command = False
+
+@bot.command()
+async def trivia(ctx, rounds_count=None):
+
+    global trivia_rounds_setting, trivia_round_number, trivia_score, trivia_guesses, prevent_trivia_command
+
+    if rounds_count:
+
+        if trivia_score or trivia_round_number > 1:
+            await ctx.send(f"`rounds_count` cannot be changed while a trivia game is already ongoing.")
+            return
+
+        try:
+            trivia_rounds_setting = int(rounds_count)
+        except Exception as e:
+            await ctx.send(f"Error: Received unrecognized value `{rounds_count}` for `rounds_count` command argument. Must be an integer from 1 to 20.")
+            return
+
+    if not 0 < trivia_rounds_setting <= 20:
+        await ctx.send(f"Error: `rounds_count` must be an integer from 1 to 20.")
+        return
+
+    if prevent_trivia_command:
+        await ctx.send(f"<@{ctx.author.id}> a trivia round is already ongoing!")
+        return
+
+    prevent_trivia_command = True
+
+    trivia_start_timer = 20
+
+    with open('trivia_questions_answers.json', 'r', encoding="utf8") as file:
+        trivia_dict = json.load(file)
+
+    trivia_questions = trivia_dict['questions']
+    trivia_answers = trivia_dict['answers']
+
+    trivia_question_number = str(random.randint(1, 151))
+
+    random_trivia = trivia_questions[trivia_question_number]
+    random_trivia_question = random_trivia['question']
+    random_trivia_choices = random_trivia['choices']
+    random.shuffle(random_trivia_choices)
+    random_trivia_answer = trivia_answers[trivia_question_number]
+
+    view = TriviaButtonsView(choices=random_trivia_choices, answer=random_trivia_answer)
+
+    unix_timestamp = int(time.mktime((datetime.now()+timedelta(seconds=trivia_start_timer)).timetuple()))
+
+    embed = discord.Embed(title=f"Trivia Game Round {trivia_round_number}/{trivia_rounds_setting}", description=f"Guessing ends: <t:{unix_timestamp}:R>\n{random_trivia_question}")
+
+    embed.add_field(
+        name='',
+        inline=False,
+        value=f"""
+a. {random_trivia_choices[0]}
+b. {random_trivia_choices[1]}
+c. {random_trivia_choices[2]}
+d. {random_trivia_choices[3]}
+"""
+    )
+
+    msg = await ctx.send(embed=embed, view=view)
+
+    await asyncio.sleep(trivia_start_timer)
+
+    embed = discord.Embed(title=f"Trivia Game Round {trivia_round_number}/{trivia_rounds_setting}", description=f"Round is over!\n{random_trivia_question}")
+
+    embed.add_field(
+        name='',
+        inline=False,
+        value=f"""
+a. {random_trivia_choices[0]}
+b. {random_trivia_choices[1]}
+c. {random_trivia_choices[2]}
+d. {random_trivia_choices[3]}
+"""
+    )
+
+    view.clear_items()
+
+    await msg.edit(embed=embed, view=view)
+
+    if trivia_guesses:
+
+        guesses = '\n'.join(f"{bot.get_user(int(user)).name}: {guess}{' :white_check_mark:' if guess.lower() == random_trivia_answer.lower() else ' :x:'}" for user, guess in trivia_guesses.items())
+
+        await ctx.send(guesses)
+
+    else:
+
+        await ctx.send(f"No guesses this round!")
+    
+    trivia_guesses = {}
+
+    if trivia_round_number < trivia_rounds_setting:
+        trivia_round_number += 1
+
+    elif not trivia_score:
+        await ctx.send("Trivia game ends with no participants!")
+        trivia_round_number = 1
+        trivia_score = {}
+    
+    else:
+
+        scores_text = '\n'.join(f"{bot.get_user(int(user)).name}: {score}" for user, score in trivia_score.items())
+
+        tied_scores = [user for user, score in trivia_score.items() if score == max(trivia_score.values())]
+
+        winner = max(trivia_score, key=trivia_score.get)
+
+        await ctx.send(f"""
+Trivia game over!
+
+**The final score:**
+{scores_text}
+""")
+
+        if max(trivia_score.values()) > 0:
+            if len(tied_scores) > 1:
+                tied_winners_text = ', '.join([f"<@{user}>" for user in tied_scores])
+                await ctx.send(f"## It's a tie between {tied_winners_text}!")
+            else:
+                await ctx.send(f"## The winner is <@{winner}>!")
+        else:
+            await ctx.send("## No winners this time!")
+
+        trivia_round_number = 1
+        trivia_score = {}
+
+    prevent_trivia_command = False
+
 # HELP COMMANDS
 
 @bot.command()
@@ -6084,7 +6271,10 @@ async def help(ctx, query=None):
          f"Have {botname} DM you a bookmark for the desired message in the server. Reply to a message with this command to bookmark the reply."),
 
         ("typerace (aliases: `tr`) `timer` `leaderboard`",
-         f"Begin a Type Racer chat game! Test your typing speed and accuracy by typing out the generated paragraph.\nOptional `timer` argument expects an integer between 30 and 240 for round duration, defaults 120. Optional argument `leaderboard` displays leaderboard. Additional argument `net`, `gross`, or `faultless` displays the relevant leaderboard. (Example: `{prefixes[0]}tr leaderboard faultless`)")
+         f"Begin a Type Racer chat game! Test your typing speed and accuracy by typing out the generated paragraph.\nOptional `timer` argument expects an integer between 30 and 240 for round duration, defaults 120. Optional argument `leaderboard` displays leaderboard. Additional argument `net`, `gross`, or `faultless` displays the relevant leaderboard. (Example: `{prefixes[0]}tr leaderboard faultless`)"),
+
+        ("trivia `rounds_count`",
+         "Starts a trivia game (or the next round of a trvia game, if already ongoing). Takes an optional argument `rounds_count` from 1 to 20 if starting a new trvia game, to customize the number of rounds before the game ends.")
     ]
 
     mod_commands_list = [
