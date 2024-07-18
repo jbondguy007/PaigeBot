@@ -65,12 +65,15 @@ test_server_channel = 630835643953709066
 test_giveaway_notif_channel = 1079238616049537034
 miners_channel = 1206981787323211836
 notifications_squad_channel = 1234751398542049320
+voice_chat_channel = 1120605540494610462
+magazine_voting_channel = 1240470323200131223
 
 # Roles
 
 role_founders = 1067986921038549023
 role_staff = 1068243517857607770
 role_officers = 1104752510788456559
+role_assistants = 1252295434337124352
 role_fullmember = 1067986921038549022
 role_reviewer = 1067986921021788269
 role_contributors = 1067986921021788268
@@ -629,7 +632,7 @@ def chatbot(query, nickname):
 
     try:
         chat_completion = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
+            model="gpt-4o-mini",
             temperature=1.2,
             max_tokens=300,
             messages=msg
@@ -640,7 +643,7 @@ def chatbot(query, nickname):
         msg.append({"role": "assistant", "content": response.message.content})
 
         chatbot_log = msg[1:]
-        chatbot_log = chatbot_log[-10:]
+        chatbot_log = chatbot_log[-20:]
 
         return response
 
@@ -787,13 +790,14 @@ async def on_connect():
 
 @bot.event
 async def on_command_error(ctx, error):
-    global prevent_binder_command, prevent_gtp_command, prevent_mine_command, prevent_gtf_command, prevent_tr_command, prevent_trivia_command
+    global prevent_binder_command, prevent_gtp_command, prevent_mine_command, prevent_gtf_command, prevent_tr_command, prevent_trivia_command, prevent_vote_command
     prevent_binder_command = False
     prevent_gtp_command = False
     prevent_mine_command = False
     prevent_gtf_command = False
     prevent_tr_command = False
     prevent_trivia_command = False
+    prevent_vote_command = False
     print(f"ERROR: {str(error)}")
     
     traceback.print_exception(type(error), error, error.__traceback__)
@@ -872,6 +876,52 @@ async def on_raw_reaction_add(payload):
 
                 # removes the reaction
                 await message.remove_reaction(r.emoji, payload.member)
+
+# @bot.event
+# async def on_presence_update(before, after):
+
+#     if not before.guild.id == 1067986921021788260 and not before.id == 172522306147581952:
+#         return
+
+#     print(f"Presence update detected for {before.name}")
+
+#     try:
+#         activity = after.activity
+
+#         print(f"Activity: {activity}\nType: {activity.type}")
+
+#         if not before.voice.self_stream and after.voice.self_stream:
+
+#             cha = bot.get_channel(voice_chat_channel)
+#             await cha.send(f"{after.name} is now streaming {activity.name}!")
+
+#     except Exception as e:
+#         print(f"Error: {e}")
+
+# @bot.event
+# async def on_voice_state_update(member, before, after):
+
+#     if not member.guild.id == 1067986921021788260:
+#         return
+
+#     print(f"Presence update detected for {member.name}")
+
+#     try:
+#         activities = after.activities
+
+#         for activity in activities:
+
+#             print(f"Activity: {activity}\nType: {activity.type}")
+
+#             if not before.voice.self_stream and after.voice.self_stream:
+
+#                 cha = bot.get_channel(voice_chat_channel)
+#                 await cha.send(f"{member.name} is now streaming {activity.name}!")
+
+#         print("\n")
+
+#     except Exception as e:
+#         print(f"Error: {e}")
 
 # COMMANDS
 
@@ -5650,60 +5700,229 @@ async def gtf(ctx, arg=None):
 
     statistics("Guess The Flag rounds played")
 
-# reviews = {
-#     "Disco Elysium - The Final Cut": {"text": "packet", "design": "packet"},
-#     "Little Misfortune": {"text": "abubis", "design": "sleepy"},
-#     "Enter the Gungeon": {"text": "fernandopa", "design": "chocolate"},
-#     "Bastion": {"text": "chocolate", "design": "chocolate"},
-#     "Mail Time": {"text": "ape", "design": "sleepy"},
-#     "TOHU": {"text": "thexder", "design": "sleepy"},
-#     "Noxious Weeds": {"text": "chocolate", "design": "Vin"},
-#     "A Juggler's Tale": {"text": "chocolate", "design": "chocolate"},
-#     "Nine Witches: Family Disruption": {"text": "kal", "design": "chocolate"},
-#     "Gorogoa": {"text": "jahas", "design": "chocolate"},
-#     "Snowtopia": {"text": "fspecto", "design": "sleepy"},
-#     "Swallow the Sea": {"text": "vin", "design": "vin"},
-#     "Tekken (2010) Movie": {"text": "jahas", "design": "vin"},
-#     "Coffee Talk": {"text": "abubis", "design": "adri"},
-#     "Storm Boy": {"text": "celtic", "design": "sleepy"}
-# }
+# TODO Remove this, change it to file upload
+reviews_data = {
+    "Disco Elysium - The Final Cut": {"text": "packet", "design": "packet"},
+    "Little Misfortune": {"text": "abubis", "design": "sleepy"},
+    "Enter the Gungeon": {"text": "fernandopa", "design": "chocolate"},
+    "Bastion": {"text": "chocolate", "design": "chocolate"},
+    "Mail Time": {"text": "ape", "design": "sleepy"},
+    "TOHU": {"text": "thexder", "design": "sleepy"},
+    "Noxious Weeds": {"text": "chocolate", "design": "Vin"},
+    "A Juggler's Tale": {"text": "chocolate", "design": "chocolate"},
+    "Nine Witches: Family Disruption": {"text": "kal", "design": "chocolate"},
+    "Gorogoa": {"text": "jahas", "design": "chocolate"},
+    "Snowtopia": {"text": "fspecto", "design": "sleepy"},
+    "Swallow the Sea": {"text": "vin", "design": "vin"},
+    "Tekken (2010) Movie": {"text": "jahas", "design": "vin"},
+    "Coffee Talk": {"text": "abubis", "design": "adri"},
+    "Storm Boy": {"text": "celtic", "design": "sleepy"}
+}
 
-# class DynamicButtonView(discord.ui.View):
-#     def __init__(self, reviews, stage=1, previous_picks=[]):
-#         super().__init__()
-#         self.reviews = reviews
-#         self.stage = stage
-#         self.previous_picks = previous_picks
-#         self.add_buttons()
-    
-#     def add_buttons(self):
-#         for game, review in self.reviews.items():
-#             button = discord.ui.Button(label=game, custom_id=game.replace(" ", ""))
-#             button.callback = self.create_callback(game, review)
-#             self.add_item(button)
-    
-#     def create_callback(self, game, review):
-#         async def button_callback(interaction: discord.Interaction):
-#             self.clear_items()
-#             await interaction.response.edit_message(content=f"## Favourite Review #{self.stage}\nYou picked `{game}`!", view=self)
-#             await self.handle_next_choice(interaction, game, review)
-#         return button_callback
-    
-#     async def handle_next_choice(self, interaction, game, review):
-#         self.previous_picks.append((game, review))
-#         if self.stage < 3:
-#             new_reviews = {g: r for g, r in self.reviews.items() if r['text'] != review['text']}
-#             new_view = DynamicButtonView(new_reviews, stage=self.stage + 1, previous_picks=self.previous_picks)
-#             await interaction.followup.send(f"## Favourite Review #{self.stage + 1}", view=new_view)
-#         else:
-#             summary = "\n".join([f"{i+1}. `{g}`" for i, (g, r) in enumerate(self.previous_picks)])
-#             await interaction.followup.send(f"Thank you for voting! Here are your picks:\n{summary}")
+with open('reviews_voting_data.json', 'r') as outfile:
+    reviews_data = json.load(outfile)
 
-# @bot.command()
-# async def vote(ctx):
-#     view = DynamicButtonView(reviews)
-#     await ctx.send(f"Hello, dear reader, and welcome to the SGM voting ballot!\nPlease choose among the following options which was your favorite review in our last issue, based on **the words written by the reviewer**. Don't worry, you'll get to vote on the designs afterwards! You'll cast 3 votes each time, giving 3 points to your first choice, 2 to your second and 1 to your third choice.")
-#     await ctx.send("## Favourite Review #1", view=view)
+class ReviewsVotingButtonsView(discord.ui.View):
+    def __init__(self, reviews, text_or_design, reviews_voting_file, stage=1, previous_picks={}):
+        super().__init__()
+        self.reviews = reviews
+        self.text_or_design = text_or_design
+        self.reviews_voting_file = reviews_voting_file
+        self.stage = stage
+        self.previous_picks = previous_picks
+        self.add_buttons()
+
+    def add_buttons(self):
+        self.test_val = [pp_authors[self.text_or_design] for pp_authors in self.previous_picks.values()]
+        self.illegal_reviews = {g: r for g, r in self.reviews.items() if r[self.text_or_design] in self.test_val}
+        self.legal_reviews = {g: r for g, r in self.reviews.items() if r[self.text_or_design] not in self.test_val}
+
+        # Clickable buttons
+        for game, authors in self.legal_reviews.items():
+            button = discord.ui.Button(label=game, custom_id=game.replace(" ", ""))
+            button.callback = self.create_callback(game, authors)
+            self.add_item(button)
+        
+        # Greyed out buttons
+        for game, authors in self.illegal_reviews.items():
+            button = discord.ui.Button(label=game, custom_id=game.replace(" ", ""), disabled=True)
+            button.callback = self.create_callback(game, authors)
+            self.add_item(button)
+
+    def create_callback(self, game, authors):
+        async def button_callback(interaction: discord.Interaction):
+            self.clear_items()
+            await interaction.response.edit_message(content=f"## Favourite Review{' Design' if self.text_or_design == 'design' else ''} #{self.stage}\nYou picked `{game}`!", view=self)
+            await self.handle_next_choice(interaction, game, authors)
+        return button_callback
+
+    async def handle_next_choice(self, interaction, game, authors):
+
+        global prevent_vote_command
+
+        self.previous_picks[game] = authors
+
+        # Assign points based on current stage (3 to 2 to 1)
+        if self.stage == 1:
+            points = 3
+        elif self.stage == 2:
+            points = 2
+        else:
+            points = 1
+
+        self.reviews_voting_file['votes'][authors[self.text_or_design]][self.text_or_design] += points
+        
+        # If we've casted 3 votes, switch to designers voting stage. Otherwise, continue voting.
+        if self.stage < 3:
+
+            new_view = ReviewsVotingButtonsView(self.reviews, text_or_design=self.text_or_design, reviews_voting_file=self.reviews_voting_file, stage=self.stage + 1, previous_picks=self.previous_picks)
+            await interaction.followup.send(f"## Favourite Review{' Design' if self.text_or_design == 'design' else ''} #{self.stage + 1}", view=new_view)
+            
+        else:
+
+            summary = "\n".join([f"{i+1}. `{g}`" for i, (g, r) in enumerate(self.previous_picks.items())])
+            await interaction.followup.send(f"Thank you for voting! Here are your picks for favourite reviews{' judged by design' if self.text_or_design == 'design' else ''}:\n{summary}")
+
+            self.previous_picks.clear()
+            
+            # If all votes have been casted (handle finishing up voting phase)
+            if self.text_or_design == 'design':
+
+                self.reviews_voting_file['voters'].append(interaction.user.id)
+
+                with open('reviews_voting.json', 'w') as outfile:
+                    json.dump(self.reviews_voting_file, outfile, indent=4)
+
+                await interaction.followup.send(f"Thank you for casting your votes, <@{interaction.user.id}>!")
+                
+                cha = bot.get_channel(magazine_voting_channel)
+                await cha.send(f"{interaction.user.name} has finished voting!")
+
+                prevent_vote_command = False
+
+                return
+            
+            # Otherwise, continue to second phase (design voting)
+            await interaction.followup.send(f"Now, vote for the reviews with the best designs in the magazine! Review based not on the review's writing this time, but on how much you enjoyed the page's style and design!")
+
+            design_view = ReviewsVotingButtonsView(reviews_data, text_or_design='design', reviews_voting_file=self.reviews_voting_file)
+            await interaction.followup.send("## Favourite Review Design #1", view=design_view)
+
+prevent_vote_command = False
+
+@bot.command()
+async def vote(ctx, arg=None):
+
+    global prevent_vote_command, reviews_data
+
+    with open('permanent_variables.json', 'r') as outfile:
+        permanent_variables = json.load(outfile)
+
+    if arg:
+        
+        if arg.lower() in ['begin', 'end']:
+
+            authorized_roles = [role_staff, role_assistants]
+
+            if not [role.id for role in ctx.author.roles if role.id not in authorized_roles]:
+                await ctx.send("You do not have the required role to initiate or terminate voting phase.")
+                return
+            
+            with open('reviews_voting_data.json', 'r') as outfile:
+                reviews_data = json.load(outfile)
+            
+            with open('reviews_voting.json', 'r') as outfile:
+                reviews_voting_file = json.load(outfile)
+
+            if arg.lower() == 'begin':
+                
+                if not reviews_data:
+                    await ctx.send("Warning! `reviews_voting_data.json` returned an empty value. Please ensure the file has been populated with review data, and try again.")
+                    return
+                
+                else:
+                    permanent_variables['voting_open'] = True
+                    await ctx.send("Voting phase enabled!")
+
+            # if argument is 'end'
+            else:
+                permanent_variables['voting_open'] = False
+                
+                votes_tally = reviews_voting_file['votes']
+
+                reviews_voting_file.clear()
+                reviews_data.clear()
+
+                votes_result_text = ""
+                for user, votes in votes_tally.items():
+                    formatted_text = user+":\n- Reviews: "+str(votes['text'])+"\n- Designs: "+str(votes['design'])+"\n"
+                    votes_result_text += formatted_text
+                
+                await ctx.send(f"Voting phase ended!\nHere are the results:\n\n{votes_result_text}")
+            
+            with open('reviews_voting.json', 'w') as outfile:
+                json.dump(reviews_voting_file, outfile, indent=4)
+            
+            with open('reviews_voting_data.json', 'w') as outfile:
+                json.dump(reviews_data, outfile, indent=4)
+
+            with open('permanent_variables.json', 'w') as outfile:
+                json.dump(permanent_variables, outfile, indent=4)
+            
+            return
+        
+        else:
+            await ctx.send(f"Unexpected argument! Expected `begin` or `end`, received `{arg}`.")
+            return
+        
+    if not permanent_variables['voting_open']:
+        await ctx.send("Voting phase is over! Please wait until voting phase is started by the voting administration.")
+        return
+
+    with open('reviews_voting.json', 'r') as outfile:
+        reviews_voting_file = json.load(outfile)
+
+    # Initiate votes file if empty
+    if not reviews_voting_file:
+
+        authors_list = set()
+
+        for users in reviews_data.values():
+            authors_list.add(users["text"])
+            authors_list.add(users["design"])
+
+        reviews_voting_file = {
+            'voters': [],
+            'votes': {}
+        }
+
+        for user in authors_list:
+            reviews_voting_file['votes'][user] = {
+                'text': 0,
+                'design': 0
+            }
+        
+        with open('reviews_voting.json', 'w') as outfile:
+            json.dump(reviews_voting_file, outfile, indent=4)
+    
+    if ctx.author.id in reviews_voting_file['voters']:
+        await ctx.send(f"Sorry {ctx.author.name}, you've already casted your votes for this issue!")
+        return
+    
+    if prevent_vote_command:
+        await ctx.send("Another user is currently casting their votes. Please try again later!")
+        return
+    
+    prevent_vote_command = True
+
+    cha = bot.get_channel(magazine_voting_channel)
+
+    await cha.send(f"{ctx.author.name} are casting their vote...")
+    
+    # Initiate view and DM user
+    view = ReviewsVotingButtonsView(reviews_data, text_or_design='text', reviews_voting_file=reviews_voting_file)
+    await ctx.author.send(f"Hello, dear reader, and welcome to the SGM voting ballot!\nPlease choose among the following options which was your favorite review in our last issue, based on **writing only**. Don't worry, you'll get to vote on the designs afterwards! You'll cast 3 votes each time, giving 3 points to your first choice, 2 to your second and 1 to your third choice.")
+    await ctx.author.send("## Favourite Review #1", view=view)
 
 async def random_noun():
     url = 'https://www.desiquintans.com/noungenerator?count=1'
@@ -6274,7 +6493,10 @@ async def help(ctx, query=None):
          f"Begin a Type Racer chat game! Test your typing speed and accuracy by typing out the generated paragraph.\nOptional `timer` argument expects an integer between 30 and 240 for round duration, defaults 120. Optional argument `leaderboard` displays leaderboard. Additional argument `net`, `gross`, or `faultless` displays the relevant leaderboard. (Example: `{prefixes[0]}tr leaderboard faultless`)"),
 
         ("trivia `rounds_count`",
-         "Starts a trivia game (or the next round of a trvia game, if already ongoing). Takes an optional argument `rounds_count` from 1 to 20 if starting a new trvia game, to customize the number of rounds before the game ends.")
+         "Starts a trivia game (or the next round of a trvia game, if already ongoing). Takes an optional argument `rounds_count` from 1 to 20 if starting a new trvia game, to customize the number of rounds before the game ends."),
+
+        ("vote `begin` `end`",
+         "Begin the voting process which allows you to cast your votes for your favourite review and review design. Optional staff/assistants arguments `begin` and `end` will initiate or terminate the voting phase as needed. Note: `end` command is irreversible, and will wipe the data.")
     ]
 
     mod_commands_list = [
@@ -6300,7 +6522,10 @@ async def help(ctx, query=None):
          "Sets a `message` to be sent in the general chat at 12 PM CST daily. If `message` argument is one of `none`, `clear`, or not provided, the daily notification is deleted and disabled until set again."),
 
         ("maintenance `start` `end`",
-         "BOTMASTER ONLY - Sends an offline/online notification to all bot channels.")
+         "BOTMASTER ONLY - Sends an offline/online notification to all bot channels."),
+
+        ("unblock",
+         "Disables all command blocking flags. Used to bruteforce commands that are stuck in blocking mode.")
     ]
 
     # Individual help by query.
@@ -6499,30 +6724,46 @@ async def maintenance(ctx, arg='start'):
 
     await ctx.send(f"Maintenance `{arg}` notification sent out!")
 
+# @bot.command()
+# @commands.has_any_role(role_staff)
+# async def verify(ctx):
+
+#     SGM_guild = bot.get_guild(DISCORD_SERVER_ID)
+#     server_members = SGM_guild.members
+#     verified_role = ctx.guild.get_role(role_verified)
+
+#     verified_count = 0
+#     verified_failed = [ctx.author]
+
+#     msg = await ctx.send(f"Granting the `Verified` role to all members!\n{verified_count}/{len(server_members)}")
+
+#     for member in server_members:
+#         try:
+#             await member.add_roles(verified_role)
+#         except:
+#             verified_failed.append(member)
+#         verified_count += 1
+#         await msg.edit(content=f"Granting the `Verified` role to all members!\n{verified_count}/{len(server_members)}")
+    
+#     await ctx.send(f"Task completed with `{len(verified_failed)}` error(s)!")
+#     if verified_failed:
+#         await ctx.send(f"The following users were not granted the role due to error(s):\n`{', '.join( [user.name for user in verified_failed] )}`")
+
 @bot.command()
 @commands.has_any_role(role_staff)
-async def verify(ctx):
+async def unblock(ctx):
 
-    SGM_guild = bot.get_guild(DISCORD_SERVER_ID)
-    server_members = SGM_guild.members
-    verified_role = ctx.guild.get_role(role_verified)
-
-    verified_count = 0
-    verified_failed = [ctx.author]
-
-    msg = await ctx.send(f"Granting the `Verified` role to all members!\n{verified_count}/{len(server_members)}")
-
-    for member in server_members:
-        try:
-            await member.add_roles(verified_role)
-        except:
-            verified_failed.append(member)
-        verified_count += 1
-        await msg.edit(content=f"Granting the `Verified` role to all members!\n{verified_count}/{len(server_members)}")
+    global prevent_binder_command, prevent_gtp_command, prevent_mine_command, prevent_gtf_command, prevent_tr_command, prevent_trivia_command, prevent_vote_command
     
-    await ctx.send(f"Task completed with `{len(verified_failed)}` error(s)!")
-    if verified_failed:
-        await ctx.send(f"The following users were not granted the role due to error(s):\n`{', '.join( [user.name for user in verified_failed] )}`")
+    prevent_binder_command = False
+    prevent_gtp_command = False
+    prevent_mine_command = False
+    prevent_gtf_command = False
+    prevent_tr_command = False
+    prevent_trivia_command = False
+    prevent_vote_command = False
+
+    await ctx.send("All command blocking flags have been set to `False`!")
 
 # CONTRIBUTOR COMMANDS
 
