@@ -232,6 +232,14 @@ class Buttons(discord.ui.View):
             await self.message.edit(view=self)
             await self.ctx.send("Timed out! Revealing key.")
             await self.ctx.send(self.prize['key'])
+
+            cha = bot.get_channel(notifications_squad_channel)
+            msg_link = f"https://discord.com/channels/{self.outer_ctx.guild.id}/{self.outer_ctx.channel.id}/{self.outer_ctx.message.id}"
+
+            await cha.send(
+            f"<@&{role_jackpotnotif}> {msg_link}\n<@{self.outer_ctx.author.id}> has won and claimed `{self.prize['title']}` key for `{self.prize['platform']}` at slots!",
+            allowed_mentions=discord.AllowedMentions(users=False)
+        )
             self.button_pressed = True
             self.timeout_task.cancel()
 
@@ -1592,7 +1600,7 @@ async def slotskey(ctx, *, args:commands.clean_content(fix_channel_mentions=Fals
 
     channel = bot.get_channel(notifications_squad_channel)
 
-    await channel.send(f"New prize `{output['title']}` contribued by `{channel.guild.get_member(output['user']).display_name}` has been added to the slots prizes pool! Issue the command `{prefixes[0]}slotsprizes` in #{bot_channel} for details!")
+    await channel.send(f"New prize `{output['title']}` contributed by `{channel.guild.get_member(output['user']).display_name}` has been added to the slots prizes pool! Issue the command `{prefixes[0]}slotsprizes` in <#{bot_channel}> for details!")
 
     await ctx.send("Key added to prize pool! Thanks for your contribution!")
 
@@ -4074,15 +4082,28 @@ async def reminder(ctx, reminder, *times):
     hours = 0
     minutes = 0
 
-    for data in times:
-        data = data.strip().lower()
+    if not times:
 
-        if data.endswith('d'):
-            days = int(data[:-1])
-        elif data.endswith('h'):
-            hours = int(data[:-1])
-        elif data.endswith('m'):
-            minutes = int(data[:-1])
+        if reminder.lower() == 'tc':
+            hours = 8
+        
+        elif reminder.lower() == 'slots':
+            hours = 6
+        
+        else:
+            await ctx.send(f"Reminders requires time arguments!")
+            return
+
+    else:
+        for data in times:
+            data = data.strip().lower()
+
+            if data.endswith('d'):
+                days = int(data[:-1])
+            elif data.endswith('h'):
+                hours = int(data[:-1])
+            elif data.endswith('m'):
+                minutes = int(data[:-1])
     
     time_values = {
         'days': int(days),
@@ -5644,7 +5665,57 @@ async def gtf(ctx, arg=None):
     except Exception as e:
         raise Exception(f"Fetching a flag failed - {e}. Try issuing the command with the 'cache' argument to force caching.")
 
-    country = item.text
+    country_list = [item.text]
+
+    if country_list[0] == 'Brunei ':
+        country_list = [
+            'Brunei'
+        ]
+
+    if country_list[0] == 'St. Vincent Grenadines':
+        country_list = [
+            'St. Vincent Grenadines',
+            'St. Vincent and Grenadines',
+            'St. Vincent and the Grenadines',
+            'St Vincent Grenadines',
+            'St Vincent and Grenadines',
+            'St Vincent and the Grenadines',
+            'Saint Vincent Grenadines',
+            'Saint Vincent and Grenadines',
+            'Saint Vincent and the Grenadines'
+        ]
+
+    if country_list[0] == 'Saint Lucia':
+        country_list = [
+            'Saint Lucia',
+            'St Lucia',
+            'St. Lucia'
+        ]
+
+    if country_list[0] == 'U.S.':
+        country_list = [
+            'U.S.',
+            'US',
+            'USA',
+            'U.S.A',
+            'U.S.A.',
+            'United States',
+            'United States of America'
+        ]
+    
+    if country_list[0] == 'DRC':
+        country_list = [
+            'DRC',
+            'Democratic Republic of the Congo'
+        ]
+    
+    if country_list[0] == 'U.K.':
+        country_list = [
+            'U.K.',
+            'UK',
+            'United Kingdom'
+        ]
+
     image = item.find("a").get("href")
     image_url = "https://www.worldometers.info"+image
 
@@ -5665,7 +5736,7 @@ async def gtf(ctx, arg=None):
 
         try:
             message = await bot.wait_for('message', check=check, timeout=gtf_timer)
-            if message.content.lower() == country.lower():
+            if message.content.lower() in [country.lower() for country in country_list]:
                 break
             else:
                 message = None
@@ -5684,14 +5755,21 @@ async def gtf(ctx, arg=None):
             break
 
         continue
+
+    if len(country_list) > 1:
+        other_options = ', '.join(country_list[1:])
+        other_options_listed = ' (Optionally: `'+other_options+'`)'
+
+    else:
+        other_options_listed = ''
     
     if message:
-        await ctx.send(f"{message.author.name} is correct! This is a flag of `{country}`!")
+        await ctx.send(f"{message.author.name} is correct! This is a flag of `{country_list[0]}`{other_options_listed}!")
         statistics("Guess The Flag correct guesses")
     else:
-        await ctx.send(f"No guesses? Too bad! This was the flag of... `{country}`!")
+        await ctx.send(f"No guesses? Too bad! This was the flag of... `{country_list[0]}{other_options_listed}`!")
 
-    new_embed = discord.Embed(title="Guess The Flag!", description=f"Round ended! The answer was `{country}`!")
+    new_embed = discord.Embed(title="Guess The Flag!", description=f"Round ended! The answer was `{country_list[0]}{other_options_listed}`!")
     new_embed.set_image(url='https://i.imgur.com/tEsOtAl.png')
 
     await embed_message.edit(embed=new_embed)
@@ -5700,32 +5778,14 @@ async def gtf(ctx, arg=None):
 
     statistics("Guess The Flag rounds played")
 
-# TODO Remove this, change it to file upload
-reviews_data = {
-    "Disco Elysium - The Final Cut": {"text": "packet", "design": "packet"},
-    "Little Misfortune": {"text": "abubis", "design": "sleepy"},
-    "Enter the Gungeon": {"text": "fernandopa", "design": "chocolate"},
-    "Bastion": {"text": "chocolate", "design": "chocolate"},
-    "Mail Time": {"text": "ape", "design": "sleepy"},
-    "TOHU": {"text": "thexder", "design": "sleepy"},
-    "Noxious Weeds": {"text": "chocolate", "design": "Vin"},
-    "A Juggler's Tale": {"text": "chocolate", "design": "chocolate"},
-    "Nine Witches: Family Disruption": {"text": "kal", "design": "chocolate"},
-    "Gorogoa": {"text": "jahas", "design": "chocolate"},
-    "Snowtopia": {"text": "fspecto", "design": "sleepy"},
-    "Swallow the Sea": {"text": "vin", "design": "vin"},
-    "Tekken (2010) Movie": {"text": "jahas", "design": "vin"},
-    "Coffee Talk": {"text": "abubis", "design": "adri"},
-    "Storm Boy": {"text": "celtic", "design": "sleepy"}
-}
-
 with open('reviews_voting_data.json', 'r') as outfile:
     reviews_data = json.load(outfile)
 
 class ReviewsVotingButtonsView(discord.ui.View):
-    def __init__(self, reviews, text_or_design, reviews_voting_file, stage=1, previous_picks={}):
+    def __init__(self, reviews, voter, text_or_design, reviews_voting_file, stage=1, previous_picks={}):
         super().__init__()
         self.reviews = reviews
+        self.voter = voter
         self.text_or_design = text_or_design
         self.reviews_voting_file = reviews_voting_file
         self.stage = stage
@@ -5734,8 +5794,8 @@ class ReviewsVotingButtonsView(discord.ui.View):
 
     def add_buttons(self):
         self.test_val = [pp_authors[self.text_or_design] for pp_authors in self.previous_picks.values()]
-        self.illegal_reviews = {g: r for g, r in self.reviews.items() if r[self.text_or_design] in self.test_val}
-        self.legal_reviews = {g: r for g, r in self.reviews.items() if r[self.text_or_design] not in self.test_val}
+        self.illegal_reviews = {g: r for g, r in self.reviews.items() if r[self.text_or_design] in self.test_val or r[self.text_or_design] == self.voter}
+        self.legal_reviews = {g: r for g, r in self.reviews.items() if r[self.text_or_design] not in self.test_val and r[self.text_or_design] != self.voter}
 
         # Clickable buttons
         for game, authors in self.legal_reviews.items():
@@ -5775,7 +5835,7 @@ class ReviewsVotingButtonsView(discord.ui.View):
         # If we've casted 3 votes, switch to designers voting stage. Otherwise, continue voting.
         if self.stage < 3:
 
-            new_view = ReviewsVotingButtonsView(self.reviews, text_or_design=self.text_or_design, reviews_voting_file=self.reviews_voting_file, stage=self.stage + 1, previous_picks=self.previous_picks)
+            new_view = ReviewsVotingButtonsView(self.reviews, voter=self.voter, text_or_design=self.text_or_design, reviews_voting_file=self.reviews_voting_file, stage=self.stage + 1, previous_picks=self.previous_picks)
             await interaction.followup.send(f"## Favourite Review{' Design' if self.text_or_design == 'design' else ''} #{self.stage + 1}", view=new_view)
             
         else:
@@ -5805,7 +5865,7 @@ class ReviewsVotingButtonsView(discord.ui.View):
             # Otherwise, continue to second phase (design voting)
             await interaction.followup.send(f"Now, vote for the reviews with the best designs in the magazine! Review based not on the review's writing this time, but on how much you enjoyed the page's style and design!")
 
-            design_view = ReviewsVotingButtonsView(reviews_data, text_or_design='design', reviews_voting_file=self.reviews_voting_file)
+            design_view = ReviewsVotingButtonsView(reviews_data, voter=self.voter, text_or_design='design', reviews_voting_file=self.reviews_voting_file)
             await interaction.followup.send("## Favourite Review Design #1", view=design_view)
 
 prevent_vote_command = False
@@ -5920,8 +5980,8 @@ async def vote(ctx, arg=None):
     await cha.send(f"{ctx.author.name} are casting their vote...")
     
     # Initiate view and DM user
-    view = ReviewsVotingButtonsView(reviews_data, text_or_design='text', reviews_voting_file=reviews_voting_file)
-    await ctx.author.send(f"Hello, dear reader, and welcome to the SGM voting ballot!\nPlease choose among the following options which was your favorite review in our last issue, based on **writing only**. Don't worry, you'll get to vote on the designs afterwards! You'll cast 3 votes each time, giving 3 points to your first choice, 2 to your second and 1 to your third choice.")
+    view = ReviewsVotingButtonsView(reviews_data, voter=ctx.author.name, text_or_design='text', reviews_voting_file=reviews_voting_file)
+    await ctx.author.send(f"Hello, dear reader, and welcome to the SGM voting ballot!\nPlease choose among the following options which was your favorite review in our last issue, based on **writing only**. Don't worry, you'll get to vote on the designs afterwards! You'll cast 3 votes each time, giving 3 points to your first choice, 2 to your second and 1 to your third choice.\n\n- You may only give points to a reviewer or designer once, therefore if there are multiple reviews or designs by the same individual, voting for them will grey out the rest of their work in that category.\n- Reviewers and designers, you cannot vote on your own review or design.\n- Therefore, these options will be greyed out as you progress through your choices.\n- Votes are final! Choose carefully.")
     await ctx.author.send("## Favourite Review #1", view=view)
 
 async def random_noun():
@@ -5955,7 +6015,7 @@ async def generate_typerace_paragraph():
 
     paragraph = textwrap.fill(p, width=50)
 
-    image = Image.new("RGB", (850, 200), "black")
+    image = Image.new("RGB", (850, 210), "black")
     draw = ImageDraw.Draw(image)
     font = ImageFont.truetype(chosen_font, 30)
     draw.text((10, 10), paragraph, font=font)
@@ -6474,8 +6534,8 @@ async def help(ctx, query=None):
         ("steamsale (aliases: `nextsale`)",
          "Checks the current ongoing Steam sale/event, and what and when the next sale/event will occur."),
 
-        ("reminder (aliases: `remind`) `\"reminder\"` `1d` `1h` `1m`",
-         "Sets a reminder for the user. Reminder must be in quotes, followed by day(s), hour(s), and minute(s) in the format Xd Xh Xm where X are integers. All are optional, but at least one value must be provided. Also see `reminders` command."),
+        ("reminder (aliases: `remind`) `\"reminder\"` `1d` `1h` `1m` OR `tc` `slots`",
+         "Sets a reminder for the user. Reminder must be in quotes (unless single-word), followed by day(s), hour(s), and minute(s) in the format Xd Xh Xm where X are integers. All are optional, but at least one value must be provided. Also takes `tc` or `slots` as argument without time, in which case it uses a preset 8h and 6h timer respectively. Also see `reminders` command."),
 
         ("reminder `cancel` `reminder_ID`",
          "Cancels reminder with ID `reminder_ID`."),
