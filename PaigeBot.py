@@ -6529,6 +6529,7 @@ By signing up for SGM Secret Santa, you commit to the following if your applicat
 async def ssadmin(ctx, arg=None):
     if not arg:
         await ctx.send("Secret Santa administration commands:\n- `list` - Lists the current registrations.\n- `finalize` - Ends registration phase, and assigns each user to another user.")
+        return
 
     with open('secret_santa_registration.json', 'r+') as feedsjson:
         registrations = json.load(feedsjson)
