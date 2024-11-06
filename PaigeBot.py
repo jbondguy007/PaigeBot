@@ -995,15 +995,19 @@ async def deadline(ctx, username):
     if user_deadlines:
         for assignment in user_deadlines:
 
+            deadline = datetime.strptime(assignment['Deadline'], '%b %d, %Y')
+
+            is_past_due = " :warning:" if datetime.strptime(f"{deadline.strftime('%b %d, %Y')}", '%b %d, %Y').date() < datetime.today().date() else ""
+
             embed.add_field(
                 name="Game",
                 value=assignment['Game'],
                 inline=False
             )
             embed.add_field(
-                name="Deadline",
-                value=assignment['Deadline'],
-                inline=False
+                name=f"{assignment['Game']}{is_past_due}",
+                value=f"• Assigned: `{assignment['Assigned']}`\n• Deadline: `{deadline.strftime('%b %d, %Y') if not deadline.year == datetime.today().year else deadline.strftime('%B %d')}`\n• Status: `{assignment['Status']}`",
+                inline=True
             )
             embed.add_field(
                 name="Status",
@@ -1023,56 +1027,36 @@ async def deadlines(ctx):
 
     deadlines = [{"Game": item[1], "Assigned": item[2], "Deadline": item[3], "Status": item[5]} for item in deadlines_raw[1:] if item[5] not in ['SUBMITTED', 'CANCELLED']]
 
-    embed = discord.Embed(title=f"Deadlines", description="List of all current assignments, excluding submitted or cancelled.", color=bot_color)
-    embed2 = discord.Embed(title=f"Deadlines (continued...)", description="List of all current assignments, excluding submitted or cancelled.", color=bot_color)
+    for i in range(0, len(deadlines), 25):
 
-    for assignment in deadlines[:25]:
-
-        if assignment['Deadline'] == 'TBD':
-
-            embed.add_field(
-                name=f"{assignment['Game']}",
-                value=f"• Assigned: `{assignment['Assigned']}`\n• Deadline: `{assignment['Deadline']}`\n• Status: `{assignment['Status']}`",
-                inline=True
-            )
-            
+        if i == 0:
+            embed = discord.Embed(title=f"Deadlines", description="List of all current assignments, excluding submitted or cancelled.", color=bot_color)
         else:
+            embed = discord.Embed(title=f"Deadlines (continued...)", description="List of all current assignments, excluding submitted or cancelled.", color=bot_color)
 
-            date = datetime.strptime(assignment['Deadline'], '%B %d')
+        for assignment in deadlines[i:i+25]:
 
-            is_past_due = " :warning:" if datetime.strptime(f"{date.strftime('%B %d')} {datetime.now().year}", '%B %d %Y').date() < datetime.today().date() else ""
+            if assignment['Deadline'] == 'TBD':
 
-            embed.add_field(
-                name=f"{assignment['Game']}{is_past_due}",
-                value=f"• Assigned: `{assignment['Assigned']}`\n• Deadline: `{assignment['Deadline']}`\n• Status: `{assignment['Status']}`",
-                inline=True
-            )
-    
-    for assignment in deadlines[25:]:
+                embed.add_field(
+                    name=f"{assignment['Game']}",
+                    value=f"• Assigned: `{assignment['Assigned']}`\n• Deadline: `{assignment['Deadline']}`\n• Status: `{assignment['Status']}`",
+                    inline=True
+                )
+                
+            else:
 
-        if assignment['Deadline'] == 'TBD':
+                deadline = datetime.strptime(assignment['Deadline'], '%b %d, %Y')
 
-            embed2.add_field(
-                name=f"{assignment['Game']}",
-                value=f"• Assigned: `{assignment['Assigned']}`\n• Deadline: `{assignment['Deadline']}`\n• Status: `{assignment['Status']}`",
-                inline=True
-            )
+                is_past_due = " :warning:" if datetime.strptime(f"{deadline.strftime('%b %d, %Y')}", '%b %d, %Y').date() < datetime.today().date() else ""
 
-        else:
+                embed.add_field(
+                    name=f"{assignment['Game']}{is_past_due}",
+                    value=f"• Assigned: `{assignment['Assigned']}`\n• Deadline: `{deadline.strftime('%b %d, %Y') if not deadline.year == datetime.today().year else deadline.strftime('%B %d')}`\n• Status: `{assignment['Status']}`",
+                    inline=True
+                )
 
-            date = datetime.strptime(assignment['Deadline'], '%B %d')
-
-            is_past_due = " :warning:" if datetime.strptime(f"{date.strftime('%B %d')} {datetime.now().year}", '%B %d %Y').date() < datetime.today().date() else ""
-
-            embed2.add_field(
-                name=f"{assignment['Game']}{is_past_due}",
-                value=f"• Assigned: `{assignment['Assigned']}`\n• Deadline: `{assignment['Deadline']}`\n• Status: `{assignment['Status']}`",
-                inline=True
-            )
-
-    await ctx.send(embed=embed)
-    if len(deadlines) > 25:
-        await ctx.send(embed=embed2)
+        await ctx.send(embed=embed)
 
 @bot.command()
 async def giveaways(ctx):
