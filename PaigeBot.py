@@ -380,10 +380,18 @@ def fetch_all_giveaways():
 def fetch_raw_deadlines():
     sheet_id = DEADLINES_GSHEET_ID
     api_key = GOOGLE_API_KEY
-    api_url = f'https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/Deadlines!A1:F1000?key={api_key}'
+
+    api_url = f'https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/Deadlines!A1:G1000?key={api_key}'
     r = requests.get(api_url)
-    data = r.json()
-    return data['values']
+
+    reviews_data = r.json()
+
+    api_url = f'https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/Magazine%20Issues!B4:E200?key={api_key}'
+    r = requests.get(api_url)
+
+    issues_data = r.json()
+
+    return (reviews_data['values'], issues_data['values'])
 
 def fetch_group_members_count():
     url = f'https://steamcommunity.com/groups/{STEAM_GROUP_ID}'
@@ -504,42 +512,29 @@ def fetch_members_owned_games():
 
 def search_magazine_index(query):
 
+    reviews_list, issues_list = fetch_raw_deadlines()
+
+    # Ignore first row
+    reviews_list = reviews_list[3:]
+
+    # Filter
+    reviews_list = [{"Game": item[2], "Assigned": item[3], "Issue Number": item[1], 'Issue Link': issues_list[int(item[1])-1][2]} for item in reviews_list[1:] if item[1]]
+
     # Try to get game title from AppID, else use query as game title
     try:
         game_title = fetch_appid_info(query)['name']
     except:
         game_title = query
+
+    match = None
+
+    for review in reviews_list:
     
-    url = f'https://steamcommunity.com/groups/{STEAM_GROUP_ID}/discussions/4/3790379982488876975/'
-    r = requests.get(url)
-    page = bs(r.content, "html.parser")
-    thread = page.find("div", {"id": "forum_op_3790379982488876975"})
-    content = thread.find("div", {"class": "content"})
+        if review['Game'].lower() == game_title.lower():
+            match = review
+            break
 
-    reviews = content.find_all("ol")
-    issues = content.find_all("div", {"class": "bb_h1"})
-
-    links = content.find_all("a", {"class": "bb_link"})
-
-    magazine_links = []
-
-    for i, link in enumerate(links):
-        if link.get("href").startswith('https://steamcommunity.com/linkfilter/?url=https://heyzine.com/flip-book/') or link.get("href").startswith('https://steamcommunity.com/linkfilter/?u=https%3A%2F%2Fheyzine.com%2Fflip-book%2F'):
-            magazine_links.append(link.get("href"))
-
-    for i, issue in enumerate(issues):
-
-        for review in reviews[i]:
-            if review.text.lower().strip() == game_title.lower().strip():
-                game_info = {
-                    "title": review.text,
-                    "AppID": review.find("a").get("href").split('/')[4],
-                    "issue": issue.text,
-                    "issue_link": urllib.parse.unquote(magazine_links[i].replace("https://steamcommunity.com/linkfilter/?url=", "").replace("https://steamcommunity.com/linkfilter/?u=", ""))
-                }
-                return game_info
-    
-    return 0
+    return match
 
 def steamID_to_name():
 
@@ -986,29 +981,41 @@ async def rules(ctx):
 @bot.command()
 async def deadline(ctx, username):
 
-    deadlines_list = fetch_raw_deadlines()
+    deadlines_list, issues_list = fetch_raw_deadlines()
 
-    user_deadlines = [{"Game": item[1], "Assigned": item[2], "Deadline": item[3], "Status": item[5]} for item in deadlines_list[1:] if item[2] == username and item[5] not in ['SUBMITTED', 'CANCELLED']]
+    user_deadlines = [{"Game": item[2], "Assigned": item[3], "Deadline": item[4], "Status": item[6]} for item in deadlines_list[1:] if item[3] == username and item[6] not in ['SUBMITTED', 'CANCELLED']]
 
     embed = discord.Embed(title=f"Deadlines for {username}", description="", color=bot_color)
 
     if user_deadlines:
         for assignment in user_deadlines:
 
-            deadline = datetime.strptime(assignment['Deadline'], '%b %d, %Y')
-
-            is_past_due = " :warning:" if datetime.strptime(f"{deadline.strftime('%b %d, %Y')}", '%b %d, %Y').date() < datetime.today().date() else ""
-
             embed.add_field(
                 name="Game",
                 value=assignment['Game'],
                 inline=False
             )
-            embed.add_field(
-                name=f"{assignment['Game']}{is_past_due}",
-                value=f"• Assigned: `{assignment['Assigned']}`\n• Deadline: `{deadline.strftime('%b %d, %Y') if not deadline.year == datetime.today().year else deadline.strftime('%B %d')}`\n• Status: `{assignment['Status']}`",
-                inline=True
-            )
+
+            if assignment['Deadline'] == 'TBD':
+                
+                embed.add_field(
+                    name=f"{assignment['Game']}",
+                    value=f"• Assigned: `{assignment['Assigned']}`\n• Deadline: `{assignment['Deadline']}`\n• Status: `{assignment['Status']}`",
+                    inline=True
+                )
+            
+            else:
+
+                deadline = datetime.strptime(assignment['Deadline'], '%b %d, %Y')
+
+                is_past_due = " :warning:" if datetime.strptime(f"{deadline.strftime('%b %d, %Y')}", '%b %d, %Y').date() < datetime.today().date() else ""
+
+                embed.add_field(
+                    name=f"{assignment['Game']}{is_past_due}",
+                    value=f"• Assigned: `{assignment['Assigned']}`\n• Deadline: `{deadline.strftime('%b %d, %Y') if not deadline.year == datetime.today().year else deadline.strftime('%B %d')}`\n• Status: `{assignment['Status']}`",
+                    inline=True
+                )
+
             embed.add_field(
                 name="Status",
                 value=f"{assignment['Status']}\n----------",
@@ -1023,9 +1030,9 @@ async def deadline(ctx, username):
 @bot.command()
 async def deadlines(ctx):
 
-    deadlines_raw = fetch_raw_deadlines()
+    deadlines_raw, issues_list = fetch_raw_deadlines()
 
-    deadlines = [{"Game": item[1], "Assigned": item[2], "Deadline": item[3], "Status": item[5]} for item in deadlines_raw[1:] if item[5] not in ['SUBMITTED', 'CANCELLED']]
+    deadlines = [{"Game": item[2], "Assigned": item[3], "Deadline": item[4], "Status": item[6]} for item in deadlines_raw[1:] if item[6] not in ['SUBMITTED', 'CANCELLED']]
 
     for i in range(0, len(deadlines), 25):
 
@@ -3638,11 +3645,10 @@ async def reviewed(ctx, *query):
         await ctx.send(f"`{query}` not found in the magazine index.")
         return
 
-    embed = discord.Embed(title=f"\"{game['title']}\" Review", url=game['issue_link'], color=bot_color)
-    embed.set_image(url=f"https://cdn.akamai.steamstatic.com/steam/apps/{game['AppID']}/header.jpg")
+    embed = discord.Embed(title=f"\"{game['Game']}\" Review", url=game['Issue Link'], color=bot_color)
     embed.add_field(
-        name=f"{game['title']} was reviewed as part of {game['issue']}.",
-        value=f"*Click the link above the embed to check out {game['issue'].split(',')[0]}!*"
+        name=f"{game['Game']} was reviewed by {game['Assigned']} as part of SG Magazine Issue #{game['Issue Number']}.",
+        value=f"*Click the link above the embed to check out SG Magazine Issue #{game['Issue Number']}!*"
     )
     await ctx.send(embed=embed)
 
