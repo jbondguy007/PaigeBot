@@ -1361,9 +1361,9 @@ async def ai(ctx, *query):
     )
 
 @bot.command()
-async def profile(ctx, *query):
+async def user(ctx, *query):
     query = ' '.join(query)
-    await ctx.send(f"Fetching profile for {query}...")
+    await ctx.send(f"Fetching Steam and SG profiles for {query}...")
 
     sg, steam = fetch_user_info(query)
 
@@ -6508,6 +6508,278 @@ By signing up for SGM Secret Santa, you commit to the following if your applicat
     
     await view.wait()
 
+# @bot.command()
+# async def weeb(ctx):
+
+#     number = random.randint(1, 143448)
+#     print(number)
+#     headers = { 'User-Agent': 'Mozilla/5.0 (Windows NT 6.0; WOW64; rv:24.0) Gecko/20100101 Firefox/24.0' }
+#     url = f'https://www.animecharactersdatabase.com/characters.php?id={number}'
+#     r = requests.get(url, headers=headers)
+#     page = bs(r.content, "html.parser")
+
+#     char_div = page.find('div', {'id': 'characterzone'})
+#     char_table = [item.text.strip() for item in char_div.findAll('td')]
+
+#     profile_widget = page.find('table', {'class': 'zero pad left bo2'})
+
+#     profile_table_title = [item.text.strip() for item in profile_widget.findAll('th')]
+#     profile_table_info = ['N/A' if not item.text.strip() else item.text.strip() for item in profile_widget.findAll('td')]
+
+
+#     profile_table = dict(zip(profile_table_title, profile_table_info))
+
+#     char_name = char_table[2]
+#     char_image = page.find('img', {'id': 'profilethumb'})['src']
+#     char_origin = char_table[6]
+#     char_mediatype = char_table[7]
+
+#     embed = discord.Embed(title=char_name)
+
+#     embed.set_image(url=char_image)
+#     embed.set_footer(text=f'{char_origin} ({char_mediatype})')
+
+#     embed.add_field(name='Gender', value=profile_table.get('Gender'), inline=False)
+#     embed.add_field(name='Eye Color', value=profile_table.get('Eye Color'), inline=False)
+#     embed.add_field(name='Hair Color', value=profile_table.get('Hair Color'), inline=False)
+#     embed.add_field(name='Hair Length', value=profile_table.get('Hair Length'), inline=False)
+#     embed.add_field(name='Apparent Age', value=profile_table.get('Apparent Age'), inline=False)
+#     embed.add_field(name='Animal Ears', value=profile_table.get('Animal Ears'), inline=False)
+    
+#     await ctx.send(embed=embed)
+
+# @bot.command()
+# async def ggdeals(ctx, user):
+
+#     if not user:
+#         await ctx.send("Steam user ID64 or vanity URL name is a required command argument.")
+#         return
+    
+#     try:
+#         vanity_resolver_api_url = f'https://api.steampowered.com/ISteamUser/ResolveVanityURL/v1/?key={STEAM_API_KEY}&vanityurl={user}'
+#         r = requests.get(vanity_resolver_api_url)
+#         data = r.json()
+#         if data['response']['success'] == 1:
+#             steamid = data['response']['steamid']
+#         else:
+#             steamid = user
+
+#         wishlist_api_url = f'https://api.steampowered.com/IWishlistService/GetWishlist/v1/?key={STEAM_API_KEY}&steamid={steamid}'
+    
+#     except:
+#         await ctx.send("Error fetching wishlist. Is the user/ID correct?")
+#         return
+    
+#     r = requests.get(wishlist_api_url)
+#     data = r.json()
+
+#     wishlist = data['response']['items']
+
+#     wishlist_sorted = sorted(wishlist, key=lambda x: x['priority'], reverse=True)
+
+#     # for game in wishlist_sorted:
+#     game = wishlist_sorted[0]['appid']
+#     headers = { 'User-Agent': 'Mozilla/5.0 (Windows NT 6.0; WOW64; rv:24.0) Gecko/20100101 Firefox/24.0' }
+#     url = f'https://gg.deals/steam/app/{game}'
+#     r = requests.get(url, headers=headers)
+#     page = bs(r.content, "html.parser")
+
+#     print(page)
+
+@bot.command()
+async def profile(ctx, *args):
+        
+    user = ctx.author
+
+    if args:
+
+        if args[0] == 'custom':
+            pass
+
+        else:
+            user = get_user_from_username(args[0])
+
+            if not user:
+                try:
+                    user = bot.get_user(int(args[0]))
+                except:
+                    await ctx.send(f"User `{args[0]}` not found in database!")
+                    return
+
+            if not user:
+                await ctx.send(f"User `{args[0]}` not found in database!")
+                return
+
+    with open('profile_cards.json', 'r+') as feedsjson:
+        profiles = json.load(feedsjson)
+    
+    if not profiles.get(str(user.id)):
+        profiles[str(user.id)] = {
+            'color': None,
+            'image': None,
+            'steam': None
+        }
+
+        with open("profile_cards.json", "w") as f:
+            json.dump(profiles, f, indent=4)
+
+    profile_data = profiles[str(user.id)]
+
+    if args:
+
+        if args[0] == 'custom':
+
+            if len(args) < 3:
+                await ctx.send("Error: Too few arguments to complete request. Check help.")
+                return
+
+            if args[1] == 'color':
+
+                is_hex = re.search(r'^#(?:[0-9a-fA-F]{3}){1,2}$', args[2])
+
+                if not is_hex:
+                    await ctx.send("Error: Argument is not hex color code.")
+                    return
+                
+                else:
+                    profile_data['color'] = str(args[2])
+            
+            if args[1] == 'image':
+
+                url = args[2]
+
+                url = url.replace("<", "")
+                url = url.replace(">", "")
+
+                is_url = validators.url(url)
+                is_https = url.startswith('https')
+                is_image_link = url.endswith( ('.jpg', '.jpeg', '.png', '.webp', '.gif') )
+
+                if not all( (is_url, is_https, is_image_link) ):
+                    await ctx.send("Error: Argument is not a valid image link.")
+                    return
+                
+                else:
+                    profile_data['image'] = str(url)
+
+            if args[1] == 'steam':
+
+                url = args[2]
+
+                url = url.replace("<", "")
+                url = url.replace(">", "")
+
+                is_url = validators.url(url)
+
+                if not is_url:
+                    await ctx.send("Error: Argument is not a valid URL.")
+                    return
+                
+                else:
+                    profile_data['steam'] = str(url)
+                
+            with open("profile_cards.json", "w") as f:
+                json.dump(profiles, f, indent=4)
+            
+            await ctx.send(f"Done! Profile updated: `{args[1]}` customizable option has been set to `{args[2]}`.")
+            return
+
+    with open('achievements_usersdata.json', 'r') as feedsjson:
+        achievements = json.load(feedsjson)
+    
+    with open('achievements.json', 'r') as feedsjson:
+        all_achievements = json.load(feedsjson)
+
+    with open('mine.json', 'r') as feedsjson:
+        mine = json.load(feedsjson)
+
+    with open('tradingcards/database.json', 'r') as feedsjson:
+        tradingcards = json.load(feedsjson)
+
+    user_achievements = achievements.get(str(user.id))
+    user_mine = mine.get(str(user.id))
+    user_tradingcards = tradingcards.get(str(user.id))
+
+    # Embed
+
+    embed = discord.Embed(title=f"{user.name}'s Profile Card", color=discord.Color.from_str(profile_data['color']) if profile_data['color'] else bot_color)
+    embed.set_thumbnail(url=user.display_avatar)
+
+    if profile_data['image']:
+        embed.set_image(url=profile_data['image'])
+
+    user_created_time = user.created_at.strftime("%B %d, %Y")
+    user_join_date = user.joined_at.strftime("%B %d, %Y")
+    rarity, role = tc_role(user)
+
+    embed.add_field(
+        name="About",
+        value=f"Discord User Since {user_created_time}\nJoined Server on {user_join_date}\nServer Role: {role}\n Steam: {profile_data['steam'] if profile_data['steam'] else 'Not configured'}"
+    )
+
+    if user_achievements:
+
+        achievements_unlocked = len([entry for entry in user_achievements.values() if entry.get('unlocked_date')])
+        total_achievements = len(all_achievements)
+
+        embed.add_field(
+            name="Achievements Unlocked",
+            value=f"{achievements_unlocked} / {total_achievements}",
+            inline=False
+        )
+
+    if user_tradingcards:
+
+        # Trading Cards stats
+
+        player_collection = fetch_player_collection(str(user.id))
+
+        normal_cards_count = sum(entry['count'] for entry in player_collection.values() if not entry['holo'])
+        holo_cards_count = sum(entry['count'] for entry in player_collection.values() if entry['holo'])
+
+        with open('tradingcards/cards.json') as feedsjson:
+            all_cards = json.load(feedsjson)
+
+        undiscovered_cards = [user for user in ctx.guild.members if str(user.id) not in [user for user in all_cards.keys()]]
+
+        player_rarities_count = Counter([card_info['rarity'] for card_info in player_collection.values() if not card_info.get('legacy') and not card_info.get('holo')])
+        
+        server_members = [x for x in ctx.guild.members]
+
+        player_rarities_count_combined = sum(player_rarities_count.values())
+
+        embed.add_field(
+            name="Trading Cards Binder Completion",
+            value=f"{player_rarities_count_combined} / {len(server_members)} ({len(undiscovered_cards)} undiscovered cards)",
+            inline=False
+        )
+    
+        embed.add_field(
+            name="Trading Cards Possessed",
+            value=f"Normal: {normal_cards_count}\nHolo: {holo_cards_count}",
+            inline=False
+        )
+
+    if user_mine:
+
+        gems_earnings = {}
+
+        for crew, crew_info in user_mine['crew'].items():
+            gems_earnings[crew] = (crew_info['count']*crew_values[crew]['production'])*crew_info['upgraded']
+
+        gems_earnings_total = round( sum( gems_earnings.values() ) )
+        gems_possession = user_mine['assets']['gems']
+        money_possession = user_mine['assets']['money']
+        ascension = round(user_mine['multi']['ascension'], 4)
+
+        embed.add_field(
+            name="Idle Mine",
+            value=f"Gems: {f'{human_num(gems_possession)}' if gems_possession > 999.99 else f'{gems_possession}'} (+{f'{human_num(gems_earnings_total)}' if gems_earnings_total > 999.99 else f'{gems_earnings_total:,}'}/min)\nMoney: ${f'{human_num(money_possession)}' if money_possession > 999.99 else f'{money_possession:,.2f}'}\nAscension Level: {f'{human_num(ascension)}' if ascension > 999.99 else f'{ascension:,}'} %",
+            inline=False
+        )
+
+    await ctx.send(embed=embed)
+
 @bot.command()
 @commands.has_any_role(role_staff)
 async def ssadmin(ctx, arg=None):
@@ -6627,7 +6899,7 @@ async def help(ctx, query=None):
         ("game `AppID price`",
          "Takes a Steam `AppID` and calculates the game's desirability score, indicating if it should be considered a premium giveaway. `price` argument optional in case API fails."),
         
-        ("profile `user`",
+        ("user `user`",
          "Returns the Steamgifts and Steam profile of the `user`, if any found. `user` may be a SteamID64, Steamgifts username, or Steam username."),
 
         ("ai `query`",
@@ -6709,7 +6981,10 @@ async def help(ctx, query=None):
          "Starts a trivia game (or the next round of a trvia game, if already ongoing). Takes an optional argument `rounds_count` from 1 to 20 if starting a new trvia game, to customize the number of rounds before the game ends."),
 
         ("vote `begin` `end`",
-         "Begin the voting process which allows you to cast your votes for your favourite review and review design. Optional staff/assistants arguments `begin` and `end` will initiate or terminate the voting phase as needed. Note: `end` command is irreversible, and will wipe the data.")
+         "Begin the voting process which allows you to cast your votes for your favourite review and review design. Optional staff/assistants arguments `begin` and `end` will initiate or terminate the voting phase as needed. Note: `end` command is irreversible, and will wipe the data."),
+
+        ("profile `user` `custom`",
+         "Without arguments, displays your profile card. Providing the `user` argument will display that user's profile card instead. Providing the `custom` argument, followed with `color` and an hex color code will set your profile widget color. Providing `custom image` followed by a valid image URL will set this image as your profile card image. Providing `custom steam` followed by a valid URL will set this URL as your profile card steam link.")
     ]
 
     mod_commands_list = [
