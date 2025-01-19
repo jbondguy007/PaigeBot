@@ -6904,9 +6904,6 @@ async def help(ctx, query=None):
 
         ("ai `query`",
          "Interact with PaigeBot's openAI integration."),
-        
-        ("profile `query`",
-         "Attempts to fetch a user's profiles links by their name passed as the query."),
 
         ("slots",
          f"Play PaigeSlots! Get 3 matching fruits, and you can win a free game key! Cooldown time is {slots_cooldown}. See `slotskey` and `slotsprizes` commands for utility."),
