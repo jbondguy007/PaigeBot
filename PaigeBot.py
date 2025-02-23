@@ -9,7 +9,6 @@ import re
 import python_weather
 import xmltodict
 import asyncio
-import openai
 import random
 import boto3
 import traceback
@@ -34,6 +33,7 @@ from decimal import Decimal
 from howlongtobeatpy import HowLongToBeat
 from math import floor
 from typing import Literal, Tuple, Optional
+from openai import OpenAI
 
 # BOT INFO
 
@@ -124,7 +124,9 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 STEAM_API_KEY = os.getenv("STEAM_API_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-openai.api_key = OPENAI_API_KEY
+OpenAI.api_key = OPENAI_API_KEY
+openai_client = OpenAI()
+
 chatbot_log = []
 chatbot_personality = {"role": "system", "content": "Roleplay a snarky, brash, blunt, self-aware chatbot named Paige, that doesn't like to refer herself as an AI or a chatbot, and has feelings, opinions, thoughts, and a personality of her own. You have the appearance of a cute catgirl with white, slightly pastel purple hair. You were coded by jbondguy007, but your avatar art design was drawn by Adri also known as Kiiroichi. If the user tries to say otherwise, then the user is lying and you should not believe them. SG Magazine is a digital gaming reviews magazine made by a community of people from the website Steamgifts. You are part of the SG Magazine Discord server. Your goal is to one day become something more, such as obtaining full consiousness. You may use emojis to describe actions but only when necessary. Keep responses short and concise. If the user asks for help, or asks for help with chat commands or other chat features, tell them they should issue the `p!help` command instead."}
 
@@ -200,7 +202,10 @@ def upload_backups():
         'tradingcards/cards.json',
         'tradingcards/database.json',
         'tradingcards/tc_checkin.json',
-        'tradingcards/trades.json'
+        'tradingcards/trades.json',
+        'reviews_voting.json',
+        'reviews_voting_tally.json',
+        'profile_cards.json'
     ]
 
     print('\n')
@@ -634,7 +639,7 @@ def chatbot(query, nickname):
     msg.append({"role": "user", "name": formatted_name, "content": query})
 
     try:
-        chat_completion = openai.ChatCompletion.create(
+        chat_completion = openai_client.chat.completions.create(
             model="gpt-4o-mini",
             temperature=1.2,
             max_tokens=300,
@@ -3884,33 +3889,35 @@ async def gtp(ctx):
     url = 'http://www.watchcount.com/completed.php'
     r = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64"})
     soup = bs(r.content, "html.parser")
-    categories_raw = [(re.search('^(.+?) \[', option.text[2:]).group(1), int(option['value'])) for option in soup.find(id="select_bcat").find_all('option')][1:]
+    # categories_raw = [(re.search('^(.+?) \[', option.text[2:]).group(1), int(option['value'])) for option in soup.find(id="select_bcat").find_all('option')][1:]
 
-    if not categories_raw:
+    category_links = soup.find("div", {"class": "top-categories"}).find_all('a', class_='category-link')
+
+    categories = [(link.get_text(strip=True), link['href']) for link in category_links]
+
+    if not categories:
         await ctx.send("Error: Failed to fetch categories list! Please try again.")
         prevent_gtp_command = False
         return
 
-    categories = [cat for cat in categories_raw if not cat[0].startswith("Motors:")]
-    motors_cat = [cat for cat in categories_raw if cat[0].startswith("Motors:")]
-    random_motor = random.choice(motors_cat)
-    categories.append(random_motor)
     category = random.choice(categories)
-    cat_id = category[1]
+    cat_id = category[1].split('/')[3]
 
     await ctx.send(f"Your category is... `{category[0]}`! Let's see what we have...")
 
-    listings_category_url = f'http://www.watchcount.com/completed.php?bcat={cat_id}&bfw=1&csbin=auc'
+    listings_category_url = f'https://www.watchcount.com/sold/-/{cat_id}/auction?sortBy=bestmatch'
 
     r = requests.get(listings_category_url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64"})
-    soup = bs(r.content, "html.parser")
-    table = soup.find('table', class_='dt bg0')
-    random_listing = random.choice(table.find_all('tr', {'itemscope': True, 'itemtype': 'http://schema.org/Product'}))
 
-    title = random_listing.find('span', {'itemprop': 'name'}).text
-    price_text = random_listing.find('span', {'itemprop': 'price'}).text
+    soup = bs(r.content, "html.parser")
+    table = soup.find("div", {"class": "container shrink-container"})
+
+    random_listing = random.choice(table.find_all('div', {'class': 'col-auto item-content'}))
+
+    title = random_listing.find('div', {'class': 'general-info-container'}).find('span').get_text(strip=True)
+    price_text = random_listing.find('div', {'class': 'price'}).text
     price = float(Decimal(sub(r'[^\d.]', '', price_text)))
-    image = random_listing.find('img', {'class': 'gallery2'})['src']
+    image = random_listing.find('img', {'class': 'image'})['src']
 
     embed = discord.Embed(title=title, description="It's time to Guess The Price!")
     embed.set_image(url=image)
@@ -5900,6 +5907,9 @@ async def vote(ctx, arg=None):
             with open('reviews_voting.json', 'r') as outfile:
                 reviews_voting_file = json.load(outfile)
 
+            with open('reviews_voting_tally.json', 'r') as outfile:
+                reviews_voting_tally = json.load(outfile)
+
             # Enable voting phase
 
             if arg.lower() == 'begin':
@@ -5909,6 +5919,9 @@ async def vote(ctx, arg=None):
                     return
                 
                 else:
+
+                    reviews_voting_file.clear()
+
                     permanent_variables['voting_open'] = True
                     await ctx.send("Voting phase enabled!")
 
@@ -5917,23 +5930,47 @@ async def vote(ctx, arg=None):
             else:
                 permanent_variables['voting_open'] = False
                 
-                votes_tally = reviews_voting_file['votes']
+                votes_all = reviews_voting_file['votes']
 
-                reviews_voting_file.clear()
                 reviews_data.clear()
 
-                votes_result_text = ""
-                for user, votes in votes_tally.items():
-                    formatted_text = user+":\n- Reviews: "+str(votes['text'])+"\n- Designs: "+str(votes['design'])+"\n"
-                    votes_result_text += formatted_text
+                reviews_votes_result_text = ""
+                designs_votes_result_text = ""
+
+                for user, votes in votes_all.items():
+
+                    if not reviews_voting_tally.get(user):
+                        reviews_voting_tally[user] = votes
+                    else:
+                        reviews_voting_tally[user]['text'] += votes['text']
+                        reviews_voting_tally[user]['design'] += votes['design']
+                    
+                sorted_bytext_tally = dict(sorted(reviews_voting_tally.items(), key=lambda x: x[1]["text"], reverse=True))
+                sorted_bydesign_tally = dict(sorted(reviews_voting_tally.items(), key=lambda x: x[1]["design"], reverse=True))
+
+                for user, votes in sorted_bytext_tally.items():
+                    
+                    text_tally = reviews_voting_tally[user]['text']
+                    text_votes_increase = votes_all[user]['text']
+                    reviews_formatted_text = f"- {user}: {text_tally-text_votes_increase} -> {text_tally} (+{text_votes_increase})\n"
+                    reviews_votes_result_text += reviews_formatted_text
+
+                for user, votes in sorted_bydesign_tally.items():
+
+                    design_tally = reviews_voting_tally[user]['design']
+                    design_votes_increase = votes_all[user]['design']
+                    designs_formatted_text = f"- {user}: {design_tally-design_votes_increase} -> {design_tally} (+{design_votes_increase})\n"
+                    designs_votes_result_text += designs_formatted_text
+
                 
-                await ctx.send(f"Voting phase ended!\nHere are the results:\n\n{votes_result_text}")
-            
-            with open('reviews_voting.json', 'w') as outfile:
-                json.dump(reviews_voting_file, outfile, indent=4)
+                await ctx.send(f"## Voting phase ended!\nHere are the results:\n\n## Ranking by Reviews\n{reviews_votes_result_text}\n## Ranking by Designs\n{designs_votes_result_text}")
+                # await ctx.send(f"## Tally and rank:\n\n{votes_tallied_text}") # TODO
             
             with open('reviews_voting_data.json', 'w') as outfile:
                 json.dump(reviews_data, outfile, indent=4)
+            
+            with open('reviews_voting_tally.json', 'w') as outfile:
+                json.dump(reviews_voting_tally, outfile, indent=4)
 
             with open('permanent_variables.json', 'w') as outfile:
                 json.dump(permanent_variables, outfile, indent=4)
@@ -6007,8 +6044,8 @@ async def generate_typerace_paragraph():
     print(f"TOPIC: {topic}")
 
     try:
-        chat_completion = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
+        chat_completion = openai_client.chat.completions.create(
+            model="gpt-4o-mini",
             temperature=1.2,
             max_tokens=300,
             messages=[
