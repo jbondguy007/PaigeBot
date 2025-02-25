@@ -6030,6 +6030,65 @@ async def vote(ctx, arg=None):
     await ctx.author.send(f"Hello, dear reader, and welcome to the SGM voting ballot!\nPlease choose among the following options which was your favorite review in our last issue, based on **writing only**. Don't worry, you'll get to vote on the designs afterwards! You'll cast 3 votes each time, giving 3 points to your first choice, 2 to your second and 1 to your third choice.\n\n- You may only give points to a reviewer or designer once, therefore if there are multiple reviews or designs by the same individual, voting for them will grey out the rest of their work in that category.\n- Reviewers and designers, you cannot vote on your own review or design.\n- Therefore, these options will be greyed out as you progress through your choices.\n- Votes are final! Choose carefully.")
     await ctx.author.send("## Favourite Review #1", view=view)
 
+@bot.command()
+async def uploadvotes(ctx):
+
+    authorized_roles = [role_staff, role_assistants]
+
+    if not [role.id for role in ctx.author.roles if role.id not in authorized_roles]:
+        await ctx.send("You do not have the required role to use this command.")
+        return
+
+    if not ctx.message.attachments:
+        await ctx.send("No attachment found. Please attach a json format file.")
+        return
+    
+    attachment = ctx.message.attachments[0]
+
+    if not attachment.filename.endswith('.json'):
+        await ctx.send("Attachment must be a json file.")
+        return
+
+    await ctx.send("File format correct, downloading...")
+    await attachment.save('reviews_voting_uploaded.json')
+    await ctx.send("Done!")
+
+    with open('reviews_voting_tally.json', 'r') as outfile:
+        reviews_voting_tally = json.load(outfile)
+    with open('reviews_voting_uploaded.json', 'r') as outfile:
+        reviews_voting_uploaded = json.load(outfile)
+
+    reviews_votes_result_text = ""
+
+    await ctx.send("Adding to tally...")
+
+    try:
+    
+        for user, votes in reviews_voting_uploaded.items():
+
+            if not reviews_voting_tally.get(user):
+                reviews_voting_tally[user] = votes
+            else:
+                reviews_voting_tally[user]['text'] += votes['text']
+                reviews_voting_tally[user]['design'] += votes['design']
+        
+            text_tally = reviews_voting_tally[user]['text']
+            text_votes_increase = reviews_voting_uploaded[user]['text']
+
+            design_tally = reviews_voting_tally[user]['design']
+            design_votes_increase = reviews_voting_uploaded[user]['design']
+
+            reviews_formatted_text = f"- {user}:\n  - Reviews: {text_tally-text_votes_increase} -> {text_tally} (+{text_votes_increase})\n  - Designs: {design_tally-design_votes_increase} -> {design_tally} (+{design_votes_increase})\n"
+            reviews_votes_result_text += reviews_formatted_text
+
+        with open('reviews_voting_tally.json', 'w') as outfile:
+            json.dump(reviews_voting_tally, outfile, indent=4)
+        
+        await ctx.send(f"Done!\n\n{reviews_votes_result_text}")
+    
+    except Exception as e:
+        await ctx.send(f"Something went wrong!\n\n{e}")
+
 async def random_noun():
     url = 'https://www.desiquintans.com/noungenerator?count=1'
     r = requests.get(url)
@@ -6461,96 +6520,6 @@ Trivia game over!
 
     prevent_trivia_command = False
 
-class SecretSantaButtons(discord.ui.View):
-    def __init__(self, ctx, wishlist, role):
-        super().__init__()
-        self.ctx = ctx
-        self.author = ctx.author
-        self.wishlist = wishlist
-
-    async def interaction_check(self, interaction: discord.Interaction):
-        return interaction.user.id == self.author.id
-
-    @discord.ui.button(label='Agree', style=discord.ButtonStyle.success)
-    async def agree(self, interaction: discord.Interaction, button: discord.ui.Button):
-        button.disabled = True
-        for child in self.children:
-            child.disabled = True
-        await interaction.response.edit_message(view=self)
-
-        try:
-            await self.author.send()
-        except discord.Forbidden:
-            await interaction.followup.send(f'<@{self.author.id}> Registration failed as PaigeBot is unable to DM you. Please ensure your privacy settings allow DMs from this server!', ephemeral=False)
-            return
-        except discord.HTTPException:
-            pass 
-
-        with open('secret_santa_registration.json', 'r') as feedsjson:
-            file = json.load(feedsjson)
-
-        file[self.author.id] = {
-            'info': {
-                'name': self.author.name,
-                'id': self.author.id,
-                'wishlist': self.wishlist
-            },
-            'assigned': {}
-        }
-
-        with open("secret_santa_registration.json", "w") as f:
-            json.dump(file, f, indent=4)
-        
-        role = self.ctx.guild.get_role(role_secretsanta)
-        await self.author.add_roles(role)
-        
-        await interaction.followup.send(f'<@{self.author.id}> you have registered for SGM Secret Santa!', ephemeral=False)
-    
-    @discord.ui.button(label='Cancel', style=discord.ButtonStyle.danger)
-    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
-        button.disabled = True
-        for child in self.children:
-            child.disabled = True
-        await interaction.response.edit_message(view=self)
-        await interaction.followup.send(f'{self.author.name}\'s registration was cancelled.', ephemeral=False)
-
-@bot.command()
-async def secretsanta(ctx, wishlist_link=None):
-
-    with open('secret_santa_registration.json', 'r+') as feedsjson:
-        file = json.load(feedsjson)
-
-    if [key for key, val in file.items() if val.get('assigned')]:
-        await ctx.send(f'Registration phase has ended!')
-        return
-    if not wishlist_link:
-        await ctx.send(f'Argument missing - please include your wishlist link (`{prefixes[0]}secretsanta wishlist_link`)')
-        return
-    if not validators.url(wishlist_link):
-        await ctx.send(f'Argument `wishlist_link` (`{wishlist_link}`) is not a valid URL.')
-        return
-    
-    if file.get(str(ctx.author.id)):
-        await ctx.send(f'<@{ctx.author.id}> you are already registered for SGM Secret Santa!')
-        return
-
-    view = SecretSantaButtons(ctx, wishlist=wishlist_link, role=ctx.guild.get_role(role_secretsanta))
-
-    await ctx.send(f"""
-By signing up for SGM Secret Santa, you commit to the following if your application is accepted:
-- Spending a minimum of $10.00 USD (sales/discounts allowed) on Steam gift(s) and/or key(s) from your randomly assigned participant's wishlist as their gift.
-- Promise to put genuine effort in purchasing what you truly believe will make your assigned participant happier.
-- Understand that the same is expected by another random participant who will be your secret Santa, but that we cannot guarantee the quality or desirability of the gift you receive.
-- Make sure your wishlist has a variety of games at different price points. (No picking the most popular or expensive ones!) You will not commit any major changes to your wishlist which would greatly limit your secret Santa's options.
-- While not enforced, we encourage playing the game or games gifted to you by your secret Santa.
-- Your DMs must be open to members of this server, or you must have a DM open with PaigeBot, so that you may receive updates and instructions privately.
-                   
-<@{ctx.author.id}> Do you agree to these terms and would like to complete your application/registration?
-""",
-    view=view)
-    
-    await view.wait()
-
 # @bot.command()
 # async def weeb(ctx):
 
@@ -6823,65 +6792,157 @@ async def profile(ctx, *args):
 
     await ctx.send(embed=embed)
 
-@bot.command()
-@commands.has_any_role(role_staff)
-async def ssadmin(ctx, arg=None):
-    if not arg:
-        await ctx.send("Secret Santa administration commands:\n- `list` - Lists the current registrations.\n- `finalize` - Ends registration phase, and assigns each user to another user.")
-        return
+# SECRET SANTA CODE
 
-    with open('secret_santa_registration.json', 'r+') as feedsjson:
-        registrations = json.load(feedsjson)
-    
-    if arg.lower() == 'list':
-        embed = discord.Embed(title="Registrations")
+# class SecretSantaButtons(discord.ui.View):
+#     def __init__(self, ctx, wishlist, role):
+#         super().__init__()
+#         self.ctx = ctx
+#         self.author = ctx.author
+#         self.wishlist = wishlist
 
-        for userid in registrations:
+#     async def interaction_check(self, interaction: discord.Interaction):
+#         return interaction.user.id == self.author.id
 
-            name = registrations[userid]['info']['name']
-            wishlist = registrations[userid]['info']['wishlist']
+#     @discord.ui.button(label='Agree', style=discord.ButtonStyle.success)
+#     async def agree(self, interaction: discord.Interaction, button: discord.ui.Button):
+#         button.disabled = True
+#         for child in self.children:
+#             child.disabled = True
+#         await interaction.response.edit_message(view=self)
+
+#         try:
+#             await self.author.send()
+#         except discord.Forbidden:
+#             await interaction.followup.send(f'<@{self.author.id}> Registration failed as PaigeBot is unable to DM you. Please ensure your privacy settings allow DMs from this server!', ephemeral=False)
+#             return
+#         except discord.HTTPException:
+#             pass 
+
+#         with open('secret_santa_registration.json', 'r') as feedsjson:
+#             file = json.load(feedsjson)
+
+#         file[self.author.id] = {
+#             'info': {
+#                 'name': self.author.name,
+#                 'id': self.author.id,
+#                 'wishlist': self.wishlist
+#             },
+#             'assigned': {}
+#         }
+
+#         with open("secret_santa_registration.json", "w") as f:
+#             json.dump(file, f, indent=4)
         
-            embed.add_field(
-                name=name,
-                value=wishlist,
-                inline=False
-            )
+#         role = self.ctx.guild.get_role(role_secretsanta)
+#         await self.author.add_roles(role)
         
-        await ctx.send(embed=embed)
-        return
+#         await interaction.followup.send(f'<@{self.author.id}> you have registered for SGM Secret Santa!', ephemeral=False)
     
-    elif arg.lower() == 'finalize':
+#     @discord.ui.button(label='Cancel', style=discord.ButtonStyle.danger)
+#     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+#         button.disabled = True
+#         for child in self.children:
+#             child.disabled = True
+#         await interaction.response.edit_message(view=self)
+#         await interaction.followup.send(f'{self.author.name}\'s registration was cancelled.', ephemeral=False)
 
-        keys = list(registrations.keys())
-        random.shuffle(keys)
+# @bot.command()
+# async def secretsanta(ctx, wishlist_link=None):
 
-        for i, userid in enumerate(keys):
+#     with open('secret_santa_registration.json', 'r+') as feedsjson:
+#         file = json.load(feedsjson)
 
-            registrations[userid]['assigned'] = registrations[keys[i-1]]['info']
-            member=bot.get_user(int(userid))
-            assigned_user = registrations[userid]['assigned']
-            try:
-                await member.send(f"""
-Hello there!
+#     if [key for key, val in file.items() if val.get('assigned')]:
+#         await ctx.send(f'Registration phase has ended!')
+#         return
+#     if not wishlist_link:
+#         await ctx.send(f'Argument missing - please include your wishlist link (`{prefixes[0]}secretsanta wishlist_link`)')
+#         return
+#     if not validators.url(wishlist_link):
+#         await ctx.send(f'Argument `wishlist_link` (`{wishlist_link}`) is not a valid URL.')
+#         return
+    
+#     if file.get(str(ctx.author.id)):
+#         await ctx.send(f'<@{ctx.author.id}> you are already registered for SGM Secret Santa!')
+#         return
 
-The Secret Santa registration phase has ended, and you have been assigned your recipient!
+#     view = SecretSantaButtons(ctx, wishlist=wishlist_link, role=ctx.guild.get_role(role_secretsanta))
 
-Recipient: {assigned_user['name']}
-Wishlist: <{assigned_user['wishlist']}>
+#     await ctx.send(f"""
+# By signing up for SGM Secret Santa, you commit to the following if your application is accepted:
+# - Spending a minimum of $10.00 USD (sales/discounts allowed) on Steam gift(s) and/or key(s) from your randomly assigned participant's wishlist as their gift.
+# - Promise to put genuine effort in purchasing what you truly believe will make your assigned participant happier.
+# - Understand that the same is expected by another random participant who will be your secret Santa, but that we cannot guarantee the quality or desirability of the gift you receive.
+# - Make sure your wishlist has a variety of games at different price points. (No picking the most popular or expensive ones!) You will not commit any major changes to your wishlist which would greatly limit your secret Santa's options.
+# - While not enforced, we encourage playing the game or games gifted to you by your secret Santa.
+# - Your DMs must be open to members of this server, or you must have a DM open with PaigeBot, so that you may receive updates and instructions privately.
+                   
+# <@{ctx.author.id}> Do you agree to these terms and would like to complete your application/registration?
+# """,
+#     view=view)
+    
+#     await view.wait()
 
-Now is the time to have a look at their wishlist (or feel free to look at their message history on SGM, profile(s), etc) to determine what would be the best game or games to offer them as a Christmas gift. Once you've chosen the perfect gift, you can contact them to give them the keys or Steam gifts through your preferred medium (be it Steam, Discord, or other) any time between today and December 25th.
+# @bot.command()
+# @commands.has_any_role(role_staff)
+# async def ssadmin(ctx, arg=None):
+#     if not arg:
+#         await ctx.send("Secret Santa administration commands:\n- `list` - Lists the current registrations.\n- `finalize` - Ends registration phase, and assigns each user to another user.")
+#         return
 
-Remember, don't reveal that you are your recipient's Secret Santa until you're ready to give them their gift! That's the "secret" part of it.
+#     with open('secret_santa_registration.json', 'r+') as feedsjson:
+#         registrations = json.load(feedsjson)
+    
+#     if arg.lower() == 'list':
+#         embed = discord.Embed(title="Registrations")
 
-As a reminder of our guidelines:
-- Spend a minimum of $10.00 USD (sales/discounts allowed) on Steam gift(s) and/or key(s) from your randomly assigned recipient's wishlist as their gift.
-- Put genuine effort in purchasing what you truly believe will make your assigned recipient happier.
-""")
-            except:
-                await ctx.send(f"DM to <@{member.id}> failed due to privacy or permission settings!")
+#         for userid in registrations:
 
-        with open("secret_santa_registration.json", "w") as f:
-            json.dump(registrations, f, indent=4)
+#             name = registrations[userid]['info']['name']
+#             wishlist = registrations[userid]['info']['wishlist']
+        
+#             embed.add_field(
+#                 name=name,
+#                 value=wishlist,
+#                 inline=False
+#             )
+        
+#         await ctx.send(embed=embed)
+#         return
+    
+#     elif arg.lower() == 'finalize':
+
+#         keys = list(registrations.keys())
+#         random.shuffle(keys)
+
+#         for i, userid in enumerate(keys):
+
+#             registrations[userid]['assigned'] = registrations[keys[i-1]]['info']
+#             member=bot.get_user(int(userid))
+#             assigned_user = registrations[userid]['assigned']
+#             try:
+#                 await member.send(f"""
+# Hello there!
+
+# The Secret Santa registration phase has ended, and you have been assigned your recipient!
+
+# Recipient: {assigned_user['name']}
+# Wishlist: <{assigned_user['wishlist']}>
+
+# Now is the time to have a look at their wishlist (or feel free to look at their message history on SGM, profile(s), etc) to determine what would be the best game or games to offer them as a Christmas gift. Once you've chosen the perfect gift, you can contact them to give them the keys or Steam gifts through your preferred medium (be it Steam, Discord, or other) any time between today and December 25th.
+
+# Remember, don't reveal that you are your recipient's Secret Santa until you're ready to give them their gift! That's the "secret" part of it.
+
+# As a reminder of our guidelines:
+# - Spend a minimum of $10.00 USD (sales/discounts allowed) on Steam gift(s) and/or key(s) from your randomly assigned recipient's wishlist as their gift.
+# - Put genuine effort in purchasing what you truly believe will make your assigned recipient happier.
+# """)
+#             except:
+#                 await ctx.send(f"DM to <@{member.id}> failed due to privacy or permission settings!")
+
+#         with open("secret_santa_registration.json", "w") as f:
+#             json.dump(registrations, f, indent=4)
 
 # HELP COMMANDS
 
@@ -7053,7 +7114,10 @@ async def help(ctx, query=None):
          "BOTMASTER ONLY - Sends an offline/online notification to all bot channels."),
 
         ("unblock",
-         "Disables all command blocking flags. Used to bruteforce commands that are stuck in blocking mode.")
+         "Disables all command blocking flags. Used to bruteforce commands that are stuck in blocking mode."),
+        
+        ("uploadvotes",
+         "Use to upload a json file of reviews/designs votes to add to the tally. Admins and assistants only.")
     ]
 
     # Individual help by query.
