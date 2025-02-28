@@ -5951,14 +5951,14 @@ async def vote(ctx, arg=None):
                 for user, votes in sorted_bytext_tally.items():
                     
                     text_tally = reviews_voting_tally[user]['text']
-                    text_votes_increase = votes_all[user]['text']
+                    text_votes_increase = votes_all[user]['text'] if votes_all.get(user) else 0
                     reviews_formatted_text = f"- {user}: {text_tally-text_votes_increase} -> {text_tally} (+{text_votes_increase})\n"
                     reviews_votes_result_text += reviews_formatted_text
 
                 for user, votes in sorted_bydesign_tally.items():
 
                     design_tally = reviews_voting_tally[user]['design']
-                    design_votes_increase = votes_all[user]['design']
+                    design_votes_increase = votes_all[user]['design'] if votes_all.get(user) else 0
                     designs_formatted_text = f"- {user}: {design_tally-design_votes_increase} -> {design_tally} (+{design_votes_increase})\n"
                     designs_votes_result_text += designs_formatted_text
 
