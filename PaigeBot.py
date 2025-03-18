@@ -523,7 +523,19 @@ def search_magazine_index(query):
     reviews_list = reviews_list[3:]
 
     # Filter
-    reviews_list = [{"Game": item[2], "Assigned": item[3], "Issue Number": item[1], 'Issue Link': issues_list[int(item[1])-1][2]} for item in reviews_list[1:] if item[1]]
+    new_reviews_list = []
+    for item in reviews_list[1:]:
+        if item[0]:
+            review = {
+                "Game": item[2],
+                "Assigned": item[3],
+                "Issue Number": item[1]
+            }
+            if item[1]:
+                review["Issue Link"] = issues_list[int(item[1]) - 1][2]
+            else:
+                review["Issue Link"] = None
+            new_reviews_list.append(review)
 
     # Try to get game title from AppID, else use query as game title
     try:
@@ -533,7 +545,7 @@ def search_magazine_index(query):
 
     match = None
 
-    for review in reviews_list:
+    for review in new_reviews_list:
     
         if review['Game'].lower() == game_title.lower():
             match = review
@@ -3649,12 +3661,28 @@ async def reviewed(ctx, *query):
     if not game:
         await ctx.send(f"`{query}` not found in the magazine index.")
         return
+    
+    url = game['Issue Link'] if not game['Issue Link'] == 'TBD' else None
+    issue_number = game['Issue Number']
 
-    embed = discord.Embed(title=f"\"{game['Game']}\" Review", url=game['Issue Link'], color=bot_color)
-    embed.add_field(
-        name=f"{game['Game']} was reviewed by {game['Assigned']} as part of SG Magazine Issue #{game['Issue Number']}.",
-        value=f"*Click the link above the embed to check out SG Magazine Issue #{game['Issue Number']}!*"
-    )
+    embed = discord.Embed(title=f"\"{game['Game']}\" Review", url=url, color=bot_color)
+
+    if url:
+        embed.add_field(
+            name=f"{game['Game']} was reviewed by {game['Assigned']} as part of SG Magazine Issue #{issue_number}.",
+            value=f"*Click the link above the embed to check out SG Magazine Issue #{issue_number}!*"
+        )
+    elif issue_number:
+        embed.add_field(
+            name=f"{game['Game']} is being reviewed by {game['Assigned']} as part of SG Magazine Issue #{issue_number}.",
+            value=f"*SG Magazine Issue #{issue_number} is not out yet! Check back later.*"
+        )
+    else:
+        embed.add_field(
+            name=f"{game['Game']} is being reviewed by {game['Assigned']} as part of a future SG Magazine Issue.",
+            value=f"*Check back later for the review link!*"
+        )
+
     await ctx.send(embed=embed)
 
 @bot.command(aliases=['flipcoin'])
