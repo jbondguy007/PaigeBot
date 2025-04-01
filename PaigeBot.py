@@ -3,7 +3,6 @@ import os
 import platform
 import requests
 import json
-import pandas as pd
 import time
 import re
 import python_weather
@@ -13,21 +12,18 @@ import random
 import boto3
 import traceback
 import validators
-import urllib.parse
 import textwrap
 import difflib
 # import country_converter as coco
 
 from datetime import date, datetime, timedelta
 from discord.ext import commands, tasks
-from discord import message
 from dotenv import load_dotenv
 from bs4 import BeautifulSoup as bs
 from collections import Counter
 from PIL import Image, ImageFont, ImageDraw, ImageEnhance
 from io import BytesIO
 from fractions import Fraction
-from botocore.exceptions import ClientError, NoCredentialsError
 from re import sub
 from decimal import Decimal
 from howlongtobeatpy import HowLongToBeat
@@ -67,6 +63,7 @@ miners_channel = 1206981787323211836
 notifications_squad_channel = 1234751398542049320
 voice_chat_channel = 1120605540494610462
 magazine_voting_channel = 1240470323200131223
+new_faces_channel = 1067986921487351819
 
 # Roles
 
@@ -900,17 +897,27 @@ async def on_raw_reaction_add(payload):
             return
     
         if message.embeds:
-            if "Poll by" not in message.embeds[0].description or "Poll reference ID" not in message.embeds[0].footer.text:
-                return
+            if "Poll by" in message.embeds[0].description or "Poll reference ID" in message.embeds[0].footer.text:
 
-        # iterating through each reaction in the message
-        for r in message.reactions:
+                # iterating through each reaction in the message
+                for r in message.reactions:
 
-            # checks the reactant isn't a bot and the emoji isn't the one they just reacted with
-            if payload.member in [user async for user in r.users()] and not payload.member.bot and str(r) != str(payload.emoji):
+                    # checks the reactant isn't a bot and the emoji isn't the one they just reacted with
+                    if payload.member in [user async for user in r.users()] and not payload.member.bot and str(r) != str(payload.emoji):
 
-                # removes the reaction
-                await message.remove_reaction(r.emoji, payload.member)
+                        # removes the reaction
+                        await message.remove_reaction(r.emoji, payload.member)
+
+@bot.event
+async def on_member_join(member):
+    role = member.guild.get_role(role_readers)
+    await member.add_roles(role)
+
+    cha = bot.get_channel(new_faces_channel)
+    await cha.send(
+        content=f"{member.mention} has been granted the {role.mention} role. Welcome! <:paigehappy:1080230055311061152>",
+        allowed_mentions=discord.AllowedMentions.none()
+    )
 
 # @bot.event
 # async def on_presence_update(before, after):
