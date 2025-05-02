@@ -2114,12 +2114,12 @@ def tc_role(user):
 def tc_generator(user, holo=True, legacy=False):
     print(f"Generating card {user}...")
 
-    if legacy:
+    try:
+        user_id = user.id
+    except:
+        user_id = user
 
-        try:
-            user_id = user.id
-        except:
-            user_id = user
+    if legacy:
 
         base_img = Image.new( mode = "RGBA", size = (300, 400), color = (255, 255, 255) )
         card_img = Image.open(f"tradingcards/generated/{user_id}{'_holo' if holo else''}.png").convert('RGBA') # Potentially breaking
