@@ -2141,8 +2141,6 @@ def tc_generator(user, holo=True, legacy=False):
         base_img.save(f'tradingcards/generated/{card}.png')
 
         return card
-    
-    user = bot.get_user(int(user_id))
 
     pfp = user.avatar
     rarity, role = tc_role(user)
@@ -3200,7 +3198,7 @@ async def tc(ctx, *args):
                 if card_id.endswith('_holo'):
                     is_holo = True
                     card_id = card_id.replace('_holo', '')
-                users.append( (card_id, is_holo, bot.get_user(int(card_id))) )
+                users.append( (card_id, is_holo, ctx.guild.get_member(int(card_id))) )
 
             successes = 0
             failure = []
