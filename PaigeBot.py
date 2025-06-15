@@ -6010,6 +6010,9 @@ async def vote(ctx, arg=None):
             with open('permanent_variables.json', 'w') as outfile:
                 json.dump(permanent_variables, outfile, indent=4)
             
+            with open('reviews_voting.json', 'w') as outfile:
+                json.dump(reviews_voting_file, outfile, indent=4)
+            
             return
         
         else:
