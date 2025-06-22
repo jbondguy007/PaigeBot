@@ -5713,12 +5713,7 @@ async def gtf(ctx, arg=None):
     except Exception as e:
         raise Exception(f"Fetching a flag failed - {e}. Try issuing the command with the 'cache' argument to force caching.")
 
-    country_list = [item.text]
-
-    if country_list[0] == 'Brunei ':
-        country_list = [
-            'Brunei'
-        ]
+    country_list = [item.text.strip()]
 
     if country_list[0] == 'St. Vincent Grenadines':
         country_list = [
