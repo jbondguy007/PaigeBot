@@ -5670,7 +5670,7 @@ def get_gtf_flags():
             url = 'https://www.worldometers.info/geography/flags-of-the-world/'
             r = requests.get(url)
             page = bs(r.content, "html.parser")
-            items = page.find_all("div", {"class": "col-md-4"})
+            items = page.find_all("div", {"class": "border-2 p-6 flex flex-col items-center gap-2.5 max-w-[300px]"})
 
         except Exception as e:
             print(f"get_gtf_flags() function failed: {e}")
@@ -5693,7 +5693,7 @@ async def gtf(ctx, arg=None):
             try:
                 cached_flag_items = get_gtf_flags()
                 if not cached_flag_items:
-                    raise Exception("Caching flags failed.")
+                    raise Exception("Caching flags failed - cache returned empty.")
                 await ctx.send("Done!")
                 return
             except Exception as e:
