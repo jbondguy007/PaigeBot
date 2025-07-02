@@ -6141,11 +6141,11 @@ async def generate_typerace_paragraph():
             temperature=1.2,
             max_tokens=300,
             messages=[
-                {"role": "system", "content": f"Generate a random and paragraph of approximately 30 words, without quotes. The topic should relate to the word {topic}."}
+                {"role": "system", "content": f"Generate a random paragraph of approximately 30 words, without quotes. The topic should relate to the word {topic}."}
             ]
         )
 
-        p = chat_completion.choices[0]['message']['content']
+        p = chat_completion.choices[0].message.content
 
     except Exception as e: return(e)
 

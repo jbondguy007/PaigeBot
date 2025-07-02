@@ -2,3 +2,4 @@
 .env
 *.json
 tradingcards/generated/
+typeracer_prompt.png
