@@ -6918,7 +6918,7 @@ By signing up for SGM Secret Santa, you commit to the following if your applicat
     await view.wait()
 
 @bot.command()
-# @commands.has_any_role(role_staff)
+@commands.has_any_role(role_staff)
 async def ssadmin(ctx, arg=None):
     if not arg:
         await ctx.send("Secret Santa administration commands:\n- `list` - Lists the current registrations.\n- `finalize` - Ends registration phase, and assigns each user to another user.")
