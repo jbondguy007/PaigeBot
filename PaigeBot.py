@@ -6953,7 +6953,7 @@ async def ssadmin(ctx, arg=None):
             for i, userid in enumerate(keys):
                 registrations[userid]['assigned'] = registrations[keys[i-1]]['info']
 
-        abubis_id = 479319946153689098
+        abubis_id = 384493198904393740
         ray_id = 184485003525095424
         packet_id = 319190839026909184
 
