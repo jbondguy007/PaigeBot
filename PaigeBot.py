@@ -7002,21 +7002,18 @@ async def ssadmin(ctx, arg=None):
     
     elif arg.lower() == 'finalize':
 
-        keys = list(registrations.keys())
-        random.shuffle(keys)
+        for uid, entry in registrations.items():
+            assigned = entry["assigned"]
+            user = bot.get_user(int(uid))
 
-        for i, userid in enumerate(keys):
-            assigned_user = registrations[userid]['assigned']
-
-            member=bot.get_user(int(userid))
             try:
-                await member.send(f"""
+                await user.send(f"""
 Hello there!
 
 The Secret Santa registration phase has ended, and you have been assigned your recipient!
 
-Recipient: {assigned_user['name']}
-Wishlist: <{assigned_user['wishlist']}>
+Recipient: {assigned['name']}
+Wishlist: <{assigned['wishlist']}>
 
 Now is the time to have a look at their wishlist (or feel free to look at their message history on SGM, profile(s), etc) to determine what would be the best game or games to offer them as a Christmas gift. Once you've chosen the perfect gift, you can contact them to give them the keys or Steam gifts through your preferred medium (be it Steam, Discord, or other) any time between today and December 25th.
 
@@ -7027,10 +7024,7 @@ As a reminder of our guidelines:
 - Put genuine effort in purchasing what you truly believe will make your assigned recipient happier.
 """)
             except:
-                await ctx.send(f"DM to <@{member.id}> failed due to privacy or permission settings!")
-
-        with open("secret_santa_registration.json", "w") as f:
-            json.dump(registrations, f, indent=4)
+                await ctx.send(f"DM to <@{user.id}> failed due to privacy or permission settings!")
 
 # HELP COMMANDS
 
