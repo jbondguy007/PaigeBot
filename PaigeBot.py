@@ -5993,7 +5993,9 @@ async def vote(ctx, arg=None):
                     designs_votes_result_text += designs_formatted_text
 
                 
-                await ctx.send(f"## Voting phase ended!\nHere are the results:\n\n## Ranking by Reviews\n{reviews_votes_result_text}\n## Ranking by Designs\n{designs_votes_result_text}")
+                await ctx.send(f"## Voting phase ended!\nHere are the results:")
+                await ctx.send(f"## Ranking by Reviews\n{reviews_votes_result_text}")
+                await ctx.send(f"## Ranking by Designs\n{designs_votes_result_text}")
                 # await ctx.send(f"## Tally and rank:\n\n{votes_tallied_text}") # TODO
             
             with open('reviews_voting_data.json', 'w') as outfile:
